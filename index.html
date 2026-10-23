@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v7</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v8</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -109,6 +109,9 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   let micFinalizing = false;
   let recognizedCompleteWord = false;
   let lastSpokenAt = 0;
+  let audioBusy = false;
+  let audioCooldownUntil = 0;
+  let audioCooldownTimer = null;
   let activeUtterance = null; // Prevent iOS Safari from garbage collecting its speech.
   let speechCounter = 0;
   let micCounter = 0;
@@ -143,14 +146,23 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   function clearMicDebug(){$('heardRaw').textContent='';$('heardRaw').classList.add('hidden');recognizedCompleteWord=false;}
   function stopSpeaking(){
     speechCounter++;
-    if(!hasSpeech) return;
-    try{ if(window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel(); }catch(e){}
+    if(audioCooldownTimer!==null){clearTimeout(audioCooldownTimer);audioCooldownTimer=null;}
+    audioBusy=false;
+    audioCooldownUntil=0;
+    if(hasSpeech){
+      try{ if(window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel(); }catch(e){}
+    }
     activeUtterance=null;
+    renderMic();
   }
   function say(text, rate=0.91, destination='practice', after=null){
     const status = destination==='welcome' ? $('welcomeNotice') : $('notice');
     if(!hasSpeech){status.textContent='This browser does not offer spoken audio. On iPhone, open in Safari or have a parent read the word.';return;}
     const number=++speechCounter;
+    // Speech and recognition must not share the audio session on iOS.
+    audioBusy=true;
+    audioCooldownUntil=Infinity;
+    renderMic();
     // Safari can silently discard the next utterance when cancel() is called
     // immediately before speak(). Do not cancel unless another is still active.
     const busy=window.speechSynthesis.speaking || window.speechSynthesis.pending;
@@ -164,9 +176,35 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
         u.lang='en-US';u.rate=rate;u.pitch=1;
         // Let iOS pick its default English voice: selecting a specific voice can
         // fail silently, especially when getVoices() is still loading.
-        u.onstart=()=>{ if(number!==speechCounter)return; speechStarted=true;status.textContent='🔊 Speaking now…'; };
-        u.onend=()=>{ if(number!==speechCounter)return;lastSpokenAt=Date.now();status.textContent=destination==='welcome'?'Did you hear the sound test? If not, check media volume and try Safari.':'';activeUtterance=null; if(typeof after==='function')setTimeout(()=>{if(number===speechCounter)after();},1250); };
-        u.onerror=(event)=>{ if(number!==speechCounter)return;status.textContent='Audio could not play ('+(event.error||'speech error')+'). Check volume or try Safari. You can still type the letters.';activeUtterance=null; };
+        u.onstart=()=>{
+          if(number!==speechCounter)return;
+          speechStarted=true;
+          status.textContent='🔊 Speaking now…';
+        };
+        u.onend=()=>{
+          if(number!==speechCounter)return;
+          lastSpokenAt=Date.now();
+          audioBusy=false;
+          // Allow WebKit to release its output audio session before recording.
+          audioCooldownUntil=lastSpokenAt+(isIOS?1100:250);
+          status.textContent=destination==='welcome'?'Did you hear the sound test? If not, check media volume and try Safari.':'';
+          activeUtterance=null;
+          renderMic();
+          if(audioCooldownTimer!==null)clearTimeout(audioCooldownTimer);
+          audioCooldownTimer=setTimeout(()=>{
+            if(number===speechCounter)renderMic();
+            audioCooldownTimer=null;
+          },isIOS?1150:300);
+          if(typeof after==='function')setTimeout(()=>{if(number===speechCounter)after();},1250);
+        };
+        u.onerror=(event)=>{
+          if(number!==speechCounter)return;
+          audioBusy=false;
+          audioCooldownUntil=0;
+          renderMic();
+          status.textContent='Audio could not play ('+(event.error||'speech error')+'). Check volume or try Safari. You can still type the letters.';
+          activeUtterance=null;
+        };
         if(window.speechSynthesis.paused) window.speechSynthesis.resume();
         window.speechSynthesis.speak(u);
         status.textContent='🔊 Audio requested…';
@@ -175,7 +213,10 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
             status.textContent='No speech started. Tap 🔊 Hear word again, check media volume, and try Safari if this continues.';
           }
         },2600);
-      }catch(e){status.textContent='Sound could not start: '+(e.message||'browser error')+'. Try Safari.';}
+      }catch(e){
+        audioBusy=false;audioCooldownUntil=0;renderMic();
+        status.textContent='Sound could not start: '+(e.message||'browser error')+'. Try Safari.';
+      }
     };
     // Allow WebKit to finish asynchronous cancellation before a new utterance.
     // The first pronunciation is immediate and tied to the Start button tap.
@@ -186,19 +227,30 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     if (!state.started || state.cursor>=state.queue.length)return;
     say('Your word is ' + currentWord() + '. Spell ' + currentWord() + '.');
   }
-  function stopListening(){
+  function stopListening({ended=false}={}){
     micCounter++;
     if(micRecoveryTimer!==null){clearTimeout(micRecoveryTimer);micRecoveryTimer=null;}
     if(micWatchdogTimer!==null){clearTimeout(micWatchdogTimer);micWatchdogTimer=null;}
     micRecovering=false;
     micFinalizing=false;
-    if(recognition){const old=recognition;recognition=null;try{old.abort();}catch(e){}}
+    if(recognition){
+      const old=recognition;recognition=null;
+      // Calling abort() on an already-ended recognition session can disturb
+      // Safari's next microphone session. Only abort active captures.
+      if(!ended)try{old.abort();}catch(e){}
+    }
     listening=false;renderMic();
   }
   function renderMic(){
     const b=$('micBtn'); b.classList.toggle('active',listening);
-    b.textContent=micRecovering?'⏳ Reconnecting microphone…':micFinalizing?'⏳ Finishing speech…':listening?'⏹ Finish listening':'🎤 Speak letters';
-    b.disabled=!hasMic || isIOSChrome || Boolean(state.graded) || micRecovering || micFinalizing;
+    const settling=Date.now()<audioCooldownUntil && !audioBusy;
+    b.textContent=audioBusy?'🔊 Finish hearing the word…':
+      settling?'⏳ Mic ready soon…':
+      micRecovering?'⏳ Reconnecting microphone…':
+      micFinalizing?'⏳ Finishing speech…':
+      listening?'⏹ Finish listening':'🎤 Speak letters';
+    b.disabled=!hasMic || isIOSChrome || Boolean(state.graded) ||
+      micRecovering || micFinalizing || audioBusy || settling;
     $('checkBtn').disabled=Boolean(state.graded) || listening || micRecovering || micFinalizing;
     b.title=isIOSChrome?'On iPhone, open in Safari for microphone recognition':hasMic?'':'Speech recognition is not available in this browser';
   }
@@ -273,6 +325,11 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   }
   function next(){
     if(!state.graded)return;
+    // Do not force a speech cancellation mid-response. Let the audio finish.
+    if(audioBusy){
+      setNotice('Let the feedback finish speaking before moving on.');
+      return;
+    }
     stopListening();stopSpeaking();
     state.cursor++;state.graded=null;store();
     $('answer').value='';clearMicDebug();setNotice('');render();
@@ -363,14 +420,19 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     if(!hasMic){setNotice('Speech recognition is unavailable. Use the iPhone keyboard microphone or tap letters.');return;}
     if(state.graded)return;
 
-    // iOS WebKit can lose its recognition audio session after TTS playback.
-    // On every attempt, create a new recognizer; never retain one across TTS.
-    stopSpeaking();
+    // Do not cancel or interrupt spoken output while opening recognition.
+    // Start only after TTS onend and a short audio-session release window.
+    if(audioBusy || Date.now()<audioCooldownUntil){
+      setNotice('Wait for the word to finish speaking, then tap Speak letters.');
+      return;
+    }
     clearMicDebug();
     micError='';
     micFinalizing=false;
     const baseAnswer=$('answer').value;
-    const MAX_RETRIES=isIOS?2:1;
+    // iOS speech recognition must start from a fresh user tap. Timed automatic
+    // restarts can fail silently when WebKit requires user activation.
+    const MAX_RETRIES=isIOS?0:1;
 
     function beginAttempt(attempt){
       if(state.graded||!state.started||state.cursor>=state.queue.length)return;
@@ -381,9 +443,9 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       let started=false, gotResult=false, newestLetters='', wholeWordGuess=false, error=null;
       let instance;
       const active=()=>number===micCounter && recognition===instance;
-      const finish=(message)=>{
+      const finish=(message,alreadyEnded=false)=>{
         if(!active())return;
-        stopListening();
+        stopListening({ended:alreadyEnded});
         setNotice(message);
       };
       const recover=(reason)=>{
@@ -507,9 +569,9 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
           if(newestLetters){
             finish(wholeWordGuess?
               'Safari merged spelled letters into a word. Check the letters shown match what you said, then tap Check spelling.':
-              'Captured '+newestLetters.split('').join(' · ')+'. Review or edit, then tap Check spelling.');
+              'Captured '+newestLetters.split('').join(' · ')+'. Review or edit, then tap Check spelling.',true);
           }else if(gotResult){
-            finish('Safari heard speech but no letter names. Check “Safari recognized” below.');
+            finish('Safari heard speech but no letter names. Check “Safari recognized” below.',true);
           }else{
             recover('Safari stopped before returning any letters.');
           }
@@ -531,10 +593,6 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     // A brief audio-session settle window prevents immediate TTS-to-mic
     // handover. Starting recognition via the same tap is preferred; if TTS
     // just finished, ask for a second tap rather than losing user activation.
-    if(isIOS && lastSpokenAt && Date.now()-lastSpokenAt<700){
-      setNotice('The word just finished speaking. Wait a moment, then tap Speak letters again so Safari can release the speaker before opening the mic.');
-      return;
-    }
     beginAttempt(0);
   }
 
