@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v8</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v9</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -113,6 +113,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   let audioCooldownUntil = 0;
   let audioCooldownTimer = null;
   let activeUtterance = null; // Prevent iOS Safari from garbage collecting its speech.
+  let speechSequenceTimer = null; // Deliberate pauses during letter-by-letter corrections.
   let speechCounter = 0;
   let micCounter = 0;
   let speechStarted = false;
@@ -146,6 +147,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   function clearMicDebug(){$('heardRaw').textContent='';$('heardRaw').classList.add('hidden');recognizedCompleteWord=false;}
   function stopSpeaking(){
     speechCounter++;
+    if(speechSequenceTimer!==null){clearTimeout(speechSequenceTimer);speechSequenceTimer=null;}
     if(audioCooldownTimer!==null){clearTimeout(audioCooldownTimer);audioCooldownTimer=null;}
     audioBusy=false;
     audioCooldownUntil=0;
@@ -158,6 +160,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   function say(text, rate=0.91, destination='practice', after=null){
     const status = destination==='welcome' ? $('welcomeNotice') : $('notice');
     if(!hasSpeech){status.textContent='This browser does not offer spoken audio. On iPhone, open in Safari or have a parent read the word.';return;}
+    if(speechSequenceTimer!==null){clearTimeout(speechSequenceTimer);speechSequenceTimer=null;}
     const number=++speechCounter;
     // Speech and recognition must not share the audio session on iOS.
     audioBusy=true;
@@ -223,9 +226,96 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     if(busy) setTimeout(play,180); else play();
   }
 
+  // Corrections use one utterance per letter so that the time between letters
+  // is intentional, rather than being left to Safari's punctuation reading.
+  // Keep audioBusy true for the WHOLE sequence so recognition can't open
+  // while we are spelling aloud or during the pause before the retry message.
+  function speakCorrection(word){
+    if(!hasSpeech){
+      setNotice('Sound is unavailable. The correct spelling is '+word.toUpperCase().split('').join(' · ')+'.');
+      return;
+    }
+    if(speechSequenceTimer!==null){clearTimeout(speechSequenceTimer);speechSequenceTimer=null;}
+    const number=++speechCounter;
+    if(audioCooldownTimer!==null){clearTimeout(audioCooldownTimer);audioCooldownTimer=null;}
+    const busy=window.speechSynthesis.speaking || window.speechSynthesis.pending;
+    if(busy){try{window.speechSynthesis.cancel();}catch(e){}}
+    audioBusy=true;
+    audioCooldownUntil=Infinity;
+    speechStarted=false;
+    renderMic();
+
+    const letters=word.toUpperCase().split('');
+    const parts=[
+      {text:'Nice try! The correct spelling is:',rate:0.84,pause:500},
+      ...letters.map((letter,i)=>({
+        text:letter,
+        rate:0.82,
+        pause:i===letters.length-1?1250:420
+      })),
+      {text:'You will practice this one again.',rate:0.90,pause:0}
+    ];
+    let index=0;
+    function complete(){
+      if(number!==speechCounter)return;
+      lastSpokenAt=Date.now();
+      audioBusy=false;
+      audioCooldownUntil=lastSpokenAt+(isIOS?1100:250);
+      activeUtterance=null;
+      renderMic();
+      if(audioCooldownTimer!==null)clearTimeout(audioCooldownTimer);
+      audioCooldownTimer=setTimeout(()=>{
+        if(number===speechCounter)renderMic();
+        audioCooldownTimer=null;
+      },isIOS?1150:300);
+      setNotice('');
+    }
+    function playPart(){
+      speechSequenceTimer=null;
+      if(number!==speechCounter)return;
+      const part=parts[index];
+      try{
+        const utterance=new SpeechSynthesisUtterance(part.text);
+        activeUtterance=utterance;
+        utterance.lang='en-US';
+        utterance.rate=part.rate;
+        utterance.pitch=1;
+        utterance.onstart=()=>{
+          if(number!==speechCounter)return;
+          speechStarted=true;
+          setNotice(index>0&&index<=letters.length?'🔊 Reading the correct spelling slowly…':'🔊 Speaking now…');
+        };
+        utterance.onend=()=>{
+          if(number!==speechCounter)return;
+          activeUtterance=null;
+          if(index===parts.length-1){complete();return;}
+          const gap=part.pause;
+          index++;
+          speechSequenceTimer=setTimeout(playPart,gap);
+        };
+        utterance.onerror=(event)=>{
+          if(number!==speechCounter)return;
+          complete();
+          setNotice('Audio stopped before finishing ('+(event.error||'speech error')+'). You can still review the correct letters above.');
+        };
+        if(window.speechSynthesis.paused)window.speechSynthesis.resume();
+        window.speechSynthesis.speak(utterance);
+      }catch(e){
+        complete();
+        setNotice('Audio stopped before finishing. You can still review the correct letters above.');
+      }
+    }
+    if(busy)speechSequenceTimer=setTimeout(playPart,180);
+    else playPart();
+  }
+
   function speakWord(){
-    if (!state.started || state.cursor>=state.queue.length)return;
-    say('Your word is ' + currentWord() + '. Spell ' + currentWord() + '.');
+    if(!state.started || state.cursor>=state.queue.length)return;
+    const word=currentWord();
+    // All prompts are slower, with slightly more emphasis on plural endings.
+    // Do not say "plural" aloud—that would disclose part of the answer.
+    const rate=word.endsWith('s')?0.73:0.80;
+    say('Your word is '+word+'. Spell '+word+'.',rate);
   }
   function stopListening({ended=false}={}){
     micCounter++;
@@ -321,7 +411,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     state.graded={correct,newlyMastered};
     store();setNotice('');render();
     if(correct) say('That is right! You spelled '+word+' correctly. Great job!');
-    else say('Nice try! The correct spelling is: '+word.toUpperCase().split('').join('. ')+'.',0.82,'practice',()=>say('You will practice this one again.',0.9));
+    else speakCorrection(word);
   }
   function next(){
     if(!state.graded)return;
