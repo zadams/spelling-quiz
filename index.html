@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v5</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v6</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -314,6 +314,13 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     }
     return {letters:letters.join(''),unknown};
   }
+  function matchesCurrentWordTranscript(pieces, word){
+    // Safari often silently collapses spelled-out letters (V O I C E) to
+    // the word "voice". Prefer that complete recognition over partial "V".
+    const expected=word.toLowerCase();
+    return pieces.some(part=>part.toLowerCase().replace(/[^a-z]/g,'')===expected) ||
+      pieces.join('').toLowerCase().replace(/[^a-z]/g,'')===expected;
+  }
   function showTranscript(transcript){
     const raw=$('heardRaw');
     raw.textContent='Safari recognized: “'+transcript.trim().slice(0,200)+'”';
@@ -339,7 +346,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       micRecovering=false;
       micSessionHasResult=false;
       const number=++micCounter;
-      let started=false, gotResult=false, newestLetters='', error=null;
+      let started=false, gotResult=false, newestLetters='', wholeWordGuess=false, error=null;
       let instance;
       const active=()=>number===micCounter && recognition===instance;
       const finish=(message)=>{
@@ -352,7 +359,9 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
         // Even partial recognition must not exempt a session from its timeout.
         // When useful letters arrived, keep them and finish cleanly.
         if(newestLetters){
-          finish('Captured '+newestLetters.split('').join(' · ')+'. Review the letters above, then tap Check spelling. You can tap Speak letters again to add more.');
+          finish(wholeWordGuess?
+            'Safari combined your spoken letters into a word. Check that the letters in the box match what you spelled, then tap Check spelling.':
+            'Captured '+newestLetters.split('').join(' · ')+'. Review the letters above, then tap Check spelling. You can tap Speak letters again to add more.');
           return;
         }
         if(gotResult){
@@ -410,7 +419,22 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
           gotResult=true;micSessionHasResult=true;
           showTranscript(transcript);
           const parsed=parseSpokenLetters(transcript);
-          if(parsed.letters){
+          // When Safari turns spelling into a whole-word transcript, do not
+          // discard it, or keep a stale first-letter guess. The browser
+          // cannot distinguish saying a word from spelling it, so the
+          // learner must review the field before submitting.
+          const collapsedToWord=parsed.unknown.length>0 &&
+            matchesCurrentWordTranscript(pieces,currentWord());
+          if(collapsedToWord){
+            wholeWordGuess=true;
+            newestLetters=currentWord().toUpperCase();
+            const original=baseAnswer.toUpperCase().replace(/[^A-Z]/g,'');
+            $('answer').value=newestLetters.startsWith(original)?
+              newestLetters:baseAnswer+newestLetters;
+            $('answer').dispatchEvent(new Event('input',{bubbles:true}));
+            setNotice('Safari combined your spoken letters into a word. Check that the letters in the box match what you spelled before tapping Check spelling.');
+          }else if(parsed.letters){
+            wholeWordGuess=false;
             newestLetters=parsed.letters;
             $('answer').value=baseAnswer+newestLetters;
             $('answer').dispatchEvent(new Event('input',{bubbles:true}));
@@ -446,7 +470,9 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
           if(!active())return;
           if(error)return;
           if(newestLetters){
-            finish('Captured '+newestLetters.split('').join(' · ')+'. Review or edit, then tap Check spelling.');
+            finish(wholeWordGuess?
+              'Safari merged spelled letters into a word. Check the letters shown match what you said, then tap Check spelling.':
+              'Captured '+newestLetters.split('').join(' · ')+'. Review or edit, then tap Check spelling.');
           }else if(gotResult){
             finish('Safari heard speech but no letter names. Check “Safari recognized” below.');
           }else{
