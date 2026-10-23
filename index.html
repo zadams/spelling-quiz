@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v4</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v5</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -102,6 +102,11 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   let recognition = null;
   let listening = false;
   let micError = '';
+  let micRecoveryTimer = null;
+  let micWatchdogTimer = null;
+  let micRecovering = false;
+  let micSessionHasResult = false;
+  let lastSpokenAt = 0;
   let activeUtterance = null; // Prevent iOS Safari from garbage collecting its speech.
   let speechCounter = 0;
   let micCounter = 0;
@@ -158,7 +163,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
         // Let iOS pick its default English voice: selecting a specific voice can
         // fail silently, especially when getVoices() is still loading.
         u.onstart=()=>{ if(number!==speechCounter)return; speechStarted=true;status.textContent='🔊 Speaking now…'; };
-        u.onend=()=>{ if(number!==speechCounter)return;status.textContent=destination==='welcome'?'Did you hear the sound test? If not, check media volume and try Safari.':'';activeUtterance=null; if(typeof after==='function')setTimeout(()=>{if(number===speechCounter)after();},1250); };
+        u.onend=()=>{ if(number!==speechCounter)return;lastSpokenAt=Date.now();status.textContent=destination==='welcome'?'Did you hear the sound test? If not, check media volume and try Safari.':'';activeUtterance=null; if(typeof after==='function')setTimeout(()=>{if(number===speechCounter)after();},1250); };
         u.onerror=(event)=>{ if(number!==speechCounter)return;status.textContent='Audio could not play ('+(event.error||'speech error')+'). Check volume or try Safari. You can still type the letters.';activeUtterance=null; };
         if(window.speechSynthesis.paused) window.speechSynthesis.resume();
         window.speechSynthesis.speak(u);
@@ -181,13 +186,16 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   }
   function stopListening(){
     micCounter++;
-    if(recognition){try{recognition.abort();}catch(e){} recognition=null;}
+    if(micRecoveryTimer!==null){clearTimeout(micRecoveryTimer);micRecoveryTimer=null;}
+    if(micWatchdogTimer!==null){clearTimeout(micWatchdogTimer);micWatchdogTimer=null;}
+    micRecovering=false;
+    if(recognition){const old=recognition;recognition=null;try{old.abort();}catch(e){}}
     listening=false;renderMic();
   }
   function renderMic(){
     const b=$('micBtn'); b.classList.toggle('active',listening);
-    b.textContent=listening?'⏹ Stop listening':'🎤 Speak letters';
-    b.disabled=!hasMic || isIOSChrome || Boolean(state.graded);
+    b.textContent=micRecovering?'⏳ Reconnecting microphone…':listening?'⏹ Stop listening':'🎤 Speak letters';
+    b.disabled=!hasMic || isIOSChrome || Boolean(state.graded) || micRecovering;
     b.title=isIOSChrome?'On iPhone, open in Safari for microphone recognition':hasMic?'':'Speech recognition is not available in this browser';
   }
   function normalize(s){return s.toLowerCase().replace(/[^a-z]/g,'');}
@@ -312,86 +320,161 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     raw.classList.remove('hidden');
   }
   function toggleMic(){
-    if(listening){stopListening();setNotice('Stopped listening. Check the letters you entered.');return;}
-    if(isIOSChrome){setNotice('On iPhone, open this site in Safari to try live recognition, or use the keyboard microphone below.');return;}
-    if(!hasMic){setNotice('Live speech recognition is unavailable. Use the iPhone keyboard microphone or tap letters.');return;}
+    if(listening){stopListening();setNotice('Stopped listening. Review the letters you entered.');return;}
+    if(micRecovering)return;
+    if(isIOSChrome){setNotice('Open this page in Safari for live recognition, or use the keyboard microphone below.');return;}
+    if(!hasMic){setNotice('Speech recognition is unavailable. Use the iPhone keyboard microphone or tap letters.');return;}
     if(state.graded)return;
+
+    // iOS WebKit can lose its recognition audio session after TTS playback.
+    // On every attempt, create a new recognizer; never retain one across TTS.
     stopSpeaking();
-    micError='';clearMicDebug();
-    const number=++micCounter;
-    const baseAnswer=$('answer').value; // Appending another microphone segment should never duplicate earlier letters.
-    let speechRecognitionStarted=false, hasResult=false, latestLetters='';
-    try{
-      recognition=new SpeechRecognition();
-      recognition.lang='en-US';
-      recognition.continuous=!isIOS;
-      recognition.interimResults=true;
-      recognition.maxAlternatives=1;
-      recognition.onstart=()=>{
-        if(number!==micCounter)return;
-        speechRecognitionStarted=true;listening=true;renderMic();
-        setNotice('🎤 Listening! Say letters slowly, for example “P, E, N”, then pause.');
-      };
-      recognition.onspeechstart=()=>{
-        if(number!==micCounter)return;
-        setNotice('Safari detected speech. Waiting for recognized letters…');
-      };
-      recognition.onresult=(event)=>{
-        if(number!==micCounter)return;
-        hasResult=true;
-        const pieces=[];
-        for(let i=0;i<event.results.length;i++){
-          const candidate=event.results[i][0];
-          if(candidate && candidate.transcript)pieces.push(candidate.transcript);
-        }
-        const transcript=pieces.join(' ').trim();
-        if(!transcript)return;
-        showTranscript(transcript);
-        const parsed=parseSpokenLetters(transcript);
-        if(parsed.letters){
-          latestLetters=parsed.letters;
-          $('answer').value=baseAnswer+latestLetters;
-          $('answer').dispatchEvent(new Event('input',{bubbles:true}));
-          setNotice('Heard '+latestLetters.split('').join(' · ')+(parsed.unknown.length?'. Some words were unclear; review or edit the letters.':'. Check the letters before submitting.'));
-        }else{
-          setNotice('Safari heard speech but could not identify individual letters. See its transcript below. Try pausing between letters or use keyboard dictation.');
-        }
-      };
-      recognition.onerror=(event)=>{
-        if(number!==micCounter)return;
-        micError=event.error||'unknown';
-        if(micError==='not-allowed'||micError==='service-not-allowed')setNotice('Safari blocked recognition. Check Safari site microphone permission or use keyboard dictation.');
-        else if(micError==='no-speech')setNotice('Safari did not detect speech. Tap Speak letters to retry or use keyboard dictation.');
-        else if(micError!=='aborted')setNotice('Microphone error: '+micError+'. Use keyboard dictation or tap the letters.');
-      };
-      recognition.onend=()=>{
-        if(number!==micCounter)return;
-        listening=false;recognition=null;renderMic();
-        if(!micError){
-          if(!hasResult)setNotice('Safari stopped without recognized speech. Try again, or use the iPhone keyboard microphone below.');
-          else if(latestLetters)setNotice('Captured '+latestLetters.split('').join(' · ')+'. Review or edit the letters, then tap Check spelling.');
-          else setNotice('Safari heard speech but could not identify letters. See its transcript below; try again or use keyboard dictation.');
-        }
-      };
-      setNotice('Requesting microphone… allow access if Safari asks.');
-      recognition.start();listening=true;renderMic();
-      setTimeout(()=>{
-        if(number!==micCounter||!recognition||hasResult||micError)return;
-        if(!speechRecognitionStarted)setNotice('Safari has not activated recognition. Open this site directly in Safari and check microphone permission.');
-        else setNotice('🎤 Safari has started listening, but is not producing text. Waiting a little longer before switching to keyboard dictation.');
-      },5500);
-      // iOS Safari has a documented bug: speech recognition starts but never
-      // provides results or fires onerror/onend after audio playback.
-      // Recover from the stuck state rather than leaving the microphone open.
-      setTimeout(()=>{
-        if(number!==micCounter||!recognition||hasResult||micError)return;
+    clearMicDebug();
+    micError='';
+    const baseAnswer=$('answer').value;
+    const MAX_RETRIES=isIOS?2:1;
+
+    function beginAttempt(attempt){
+      if(state.graded||!state.started||state.cursor>=state.queue.length)return;
+      micRecovering=false;
+      micSessionHasResult=false;
+      const number=++micCounter;
+      let started=false, gotResult=false, newestLetters='', error=null;
+      let instance;
+      const active=()=>number===micCounter && recognition===instance;
+      const finish=(message)=>{
+        if(!active())return;
         stopListening();
-        setNotice('Safari speech recognition stalled: it did not return any letters. Please tap “Use iPhone keyboard dictation instead” below. This is a Safari limitation, not a spelling mistake.');
-      },11000);
-    }catch(e){
-      recognition=null;listening=false;renderMic();
-      setNotice('Could not start recognition: '+(e.message||'browser error')+'. Use keyboard dictation instead.');
+        setNotice(message);
+      };
+      const recover=(reason)=>{
+        if(!active())return;
+        // Even partial recognition must not exempt a session from its timeout.
+        // When useful letters arrived, keep them and finish cleanly.
+        if(newestLetters){
+          finish('Captured '+newestLetters.split('').join(' · ')+'. Review the letters above, then tap Check spelling. You can tap Speak letters again to add more.');
+          return;
+        }
+        if(gotResult){
+          finish('Safari heard speech but could not identify separate letter names. See “Safari recognized” below, or try the keyboard microphone.');
+          return;
+        }
+        stopListening(); // Abort before trying a fresh recognition session.
+        if(attempt<MAX_RETRIES){
+          micRecovering=true;
+          renderMic();
+          const delay=[950,2200][attempt] || 2200;
+          setNotice(reason+' Safari is resetting the microphone ('+(attempt+1)+'/'+MAX_RETRIES+'). Wait for “Listening” before spelling again.');
+          micRecoveryTimer=setTimeout(()=>{
+            micRecoveryTimer=null;
+            if(!micRecovering||state.graded)return;
+            beginAttempt(attempt+1);
+          },delay);
+        }else{
+          setNotice('Safari repeatedly started its microphone but returned no speech. The iPhone browser may be stuck. Refresh this page and use “Resume where I left off”, or use keyboard dictation. This will not count as a mistake.');
+        }
+      };
+
+      try{
+        instance=new SpeechRecognition();
+        recognition=instance;
+        instance.lang='en-US';
+        instance.continuous=!isIOS;
+        instance.interimResults=true;
+        instance.maxAlternatives=1;
+
+        instance.onstart=()=>{
+          if(!active())return;
+          started=true;listening=true;renderMic();
+          setNotice('🎤 Listening! Say letters slowly, for example “P, E, N”, then pause.');
+        };
+        instance.onaudiostart=()=>{
+          if(!active())return;
+          setNotice('🎤 Microphone opened. Say your letters clearly.');
+        };
+        instance.onspeechstart=()=>{
+          if(!active())return;
+          setNotice('Safari detected your voice. Waiting for letters…');
+        };
+        instance.onresult=(event)=>{
+          if(!active())return;
+          const pieces=[];
+          let anyFinal=false;
+          for(let i=0;i<event.results.length;i++){
+            const item=event.results[i];
+            if(item && item[0] && item[0].transcript)pieces.push(item[0].transcript);
+            if(item && item.isFinal)anyFinal=true;
+          }
+          const transcript=pieces.join(' ').trim();
+          if(!transcript)return;
+          gotResult=true;micSessionHasResult=true;
+          showTranscript(transcript);
+          const parsed=parseSpokenLetters(transcript);
+          if(parsed.letters){
+            newestLetters=parsed.letters;
+            $('answer').value=baseAnswer+newestLetters;
+            $('answer').dispatchEvent(new Event('input',{bubbles:true}));
+            setNotice('Heard '+newestLetters.split('').join(' · ')+'. Review the letters before checking.');
+          }else{
+            setNotice('Safari heard something but could not identify letters. See the raw transcript below.');
+          }
+          // A final transcript should release iOS audio capture promptly.
+          // Leave a bounded timeout in case stop() never fires onend.
+          if(anyFinal && isIOS){
+            try{instance.stop();}catch(e){}
+            if(micWatchdogTimer!==null)clearTimeout(micWatchdogTimer);
+            micWatchdogTimer=setTimeout(()=>{
+              if(active())recover('Safari did not finish its recognition session.');
+            },1800);
+          }
+        };
+        instance.onerror=(event)=>{
+          if(!active())return;
+          error=event.error||'unknown';
+          micError=error;
+          if(error==='not-allowed'||error==='service-not-allowed'){
+            finish('Microphone or speech recognition was denied. Check Safari site permissions, or use keyboard dictation.');
+          }else if(error==='no-speech'){
+            finish('Safari did not detect speech. Tap Speak letters again and try, or use keyboard dictation.');
+          }else if(error==='aborted'){
+            finish('The microphone was interrupted. Tap Speak letters to try again.');
+          }else{
+            recover('Safari reported microphone error: '+error+'.');
+          }
+        };
+        instance.onend=()=>{
+          if(!active())return;
+          if(error)return;
+          if(newestLetters){
+            finish('Captured '+newestLetters.split('').join(' · ')+'. Review or edit, then tap Check spelling.');
+          }else if(gotResult){
+            finish('Safari heard speech but no letter names. Check “Safari recognized” below.');
+          }else{
+            recover('Safari stopped before returning any letters.');
+          }
+        };
+        setNotice(attempt?'🎤 Retrying the microphone…':'Requesting microphone… allow access if Safari asks.');
+        instance.start();
+        listening=true;renderMic();
+        // Timeout even if Safari fires onstart/audiostart but no onresult,
+        // or sends an interim result without ever finalizing.
+        micWatchdogTimer=setTimeout(()=>{
+          if(!active())return;
+          recover(started?'Safari stalled while listening.':'Safari did not finish starting.');
+        },10500);
+      }catch(e){
+        if(active())recover('Could not start recognition: '+(e.message||'unknown error')+'.');
+      }
     }
+
+    // A brief audio-session settle window prevents immediate TTS-to-mic
+    // handover. Starting recognition via the same tap is preferred; if TTS
+    // just finished, ask for a second tap rather than losing user activation.
+    if(isIOS && lastSpokenAt && Date.now()-lastSpokenAt<700){
+      setNotice('The word just finished speaking. Wait a moment, then tap Speak letters again so Safari can release the speaker before opening the mic.');
+      return;
+    }
+    beginAttempt(0);
   }
 
   function makeLetterKeyboard(){
