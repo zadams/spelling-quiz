@@ -20,7 +20,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlig
 .wide{width:100%}.hidden{display:none !important}.progress-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#5f6690;margin-bottom:9px}.progress-bar{height:11px;border-radius:99px;background:#eae8f8;overflow:hidden}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,#20c9b3,#7c69df);transition:width .25s}
 .word-tag{display:inline-flex;gap:7px;align-items:center;border-radius:99px;background:#f1edff;color:#6550ba;padding:6px 13px;font-size:13px;font-weight:800;margin:20px 0 4px}.listen-art{margin:10px auto 12px;width:106px;height:106px;background:#edeaff;border-radius:30px;display:grid;place-items:center;font-size:47px;transform:rotate(-4deg)}.listen-art span{transform:rotate(4deg)}
 .prompt{text-align:center;font-size:clamp(24px,5vw,32px);font-weight:850;letter-spacing:-.7px;margin:10px 0 3px}.subtitle{text-align:center;color:var(--muted);margin:0 0 19px;font-size:15px}.audio-controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:22px}
-label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px}.answer{width:100%;border:2px solid #d8d5ef;border-radius:15px;background:#fcfbff;padding:15px;font-size:clamp(21px,5vw,28px);font-weight:720;letter-spacing:3px;color:#33304b;text-align:center;text-transform:uppercase;outline:none}.answer:focus{border-color:#8b79e2}.answer::placeholder{font-size:clamp(15px,3vw,18px);font-weight:500;letter-spacing:0;color:#8c90a4;text-transform:none}
+label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px}.answer{width:100%;border:2px solid #d8d5ef;border-radius:15px;background:#fcfbff;padding:15px;font-size:clamp(21px,5vw,28px);font-weight:720;letter-spacing:3px;color:#33304b;text-align:center;text-transform:none;outline:none}.answer:focus{border-color:#8b79e2}.answer::placeholder{font-size:clamp(15px,3vw,18px);font-weight:500;letter-spacing:0;color:#8c90a4;text-transform:none}
 .smalltext{color:var(--muted);font-size:13px;margin-top:8px}.notice{min-height:24px;font-size:14px;color:#536484;margin:13px 0 14px;text-align:center}.heard-raw{background:#f1f4ff;border-radius:10px;padding:9px 12px;overflow-wrap:anywhere}.buttons{display:flex;gap:10px}.buttons>*{flex:1}
 .feedback{border-radius:16px;padding:14px 15px;margin-top:14px;line-height:1.5}.feedback.good{background:#e8f8f0;border:1px solid #b3e5cb;color:#105f43}.feedback.bad{background:#fff3e7;border:1px solid #f8d7ae;color:#8d452d}.feedback strong{font-size:17px}.feedback .correct-spell{font-size:18px;letter-spacing:3px;font-weight:850;overflow-wrap:anywhere}
 .footnote{font-size:12px;color:#6d738b;line-height:1.55;margin:17px 4px}.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.stat{padding:7px 10px;border-radius:10px;background:#f4f5fc;font-size:12px;color:#545e76;font-weight:700}
@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v9</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v10</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -59,8 +59,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       <button class="btn outline" id="restartWordBtn">↻ Start word over</button>
     </div>
     <label class="input-label" for="answer">Your spelling</label>
-    <input class="answer" type="text" id="answer" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="Enter the letters here" aria-label="Spell the word">
-    <p class="smalltext">Say letters separately (for example: “C, A, T”), or use the iPhone keyboard microphone. Review the letters before checking—the browser can mishear B, D, E, and similar letters.</p>
+    <input class="answer" type="text" id="answer" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Enter the letters here" aria-label="Spell the word">
+    <p class="smalltext">Say letters separately (for example: “c, a, t”), or use the iPhone keyboard microphone. Review the letters before checking—the browser can mishear B, D, E, and similar letters.</p>
     <div class="notice" id="notice" role="status" aria-live="polite"></div>
     <div class="smalltext heard-raw hidden" id="heardRaw" aria-live="polite"></div>
     <div class="letter-toggle"><button class="linkbtn" id="showWordBtn">Parent help: show current word</button><div id="revealedWord" class="hidden" style="font-size:21px;font-weight:800;letter-spacing:1.5px" aria-live="polite"></div></div>
@@ -232,7 +232,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   // while we are spelling aloud or during the pause before the retry message.
   function speakCorrection(word){
     if(!hasSpeech){
-      setNotice('Sound is unavailable. The correct spelling is '+word.toUpperCase().split('').join(' · ')+'.');
+      setNotice('Sound is unavailable. The correct spelling is '+word.split('').join(' · ')+'.');
       return;
     }
     if(speechSequenceTimer!==null){clearTimeout(speechSequenceTimer);speechSequenceTimer=null;}
@@ -245,7 +245,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     speechStarted=false;
     renderMic();
 
-    const letters=word.toUpperCase().split('');
+    const letters=word.split('');
     const parts=[
       {text:'Nice try! The correct spelling is:',rate:0.84,pause:500},
       ...letters.map((letter,i)=>({
@@ -374,7 +374,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       $('feedback').className='feedback '+(result?'good':'bad');
       $('feedback').innerHTML=result?
         '<strong>✅ You got it!</strong><div>'+word.replaceAll('&','&amp;')+' is spelled correctly.</div>':
-        '<strong>💡 Good try!</strong><div>The correct spelling is:</div><div class="correct-spell">'+word.toUpperCase().split('').join(' · ')+'</div><div>You’ll get to practice this word again.</div>';
+        '<strong>💡 Good try!</strong><div>The correct spelling is:</div><div class="correct-spell">'+word.split('').join(' · ')+'</div><div>You’ll get to practice this word again.</div>';
       $('nextBtn').textContent=(state.cursor===state.queue.length-1 && result && state.mastered.length===20)?'See my results 🏆':'Next word →';
     }else{$('feedback').className='feedback hidden';$('feedback').textContent='';}
     renderMic();
@@ -394,7 +394,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     // Safety net: never count a partial letter as wrong when Safari actually
     // returned the full word later. Let the child review and confirm instead.
     if(guess!==word && recognizedCompleteWord){
-      $('answer').value=word.toUpperCase();
+      $('answer').value=word;
       recognizedCompleteWord=false;
       setNotice('Safari heard the full word but the answer field had only part of it. I filled the recognized letters in. Review what you actually spelled, then tap Check spelling again. No mistake counted.');
       return;
@@ -450,19 +450,19 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     $('resumeBtn').classList.add('hidden');
   }
   const names={
-    'a':'A','ay':'A','eh':'A','b':'B','bee':'B','be':'B',
-    'c':'C','cee':'C','sea':'C','see':'C','si':'C',
-    'd':'D','dee':'D','de':'D','e':'E','ee':'E',
-    'f':'F','ef':'F','eff':'F','g':'G','gee':'G','ghee':'G',
-    'h':'H','aitch':'H','haitch':'H','age':'H',
-    'i':'I','eye':'I','aye':'I','j':'J','jay':'J','k':'K','kay':'K',
-    'l':'L','el':'L','ell':'L','m':'M','em':'M','n':'N','en':'N',
-    'o':'O','oh':'O','owe':'O','p':'P','pee':'P','pea':'P',
-    'q':'Q','cue':'Q','queue':'Q','r':'R','are':'R','ar':'R',
-    's':'S','ess':'S','es':'S','t':'T','tee':'T','tea':'T',
-    'u':'U','you':'U','yew':'U','v':'V','vee':'V',
-    'w':'W','doubleyou':'W','doubleu':'W',
-    'x':'X','ex':'X','y':'Y','why':'Y','z':'Z','zee':'Z','zed':'Z'
+    'a':'a','ay':'a','eh':'a','b':'b','bee':'b','be':'b',
+    'c':'c','cee':'c','sea':'c','see':'c','si':'c',
+    'd':'d','dee':'d','de':'d','e':'e','ee':'e',
+    'f':'f','ef':'f','eff':'f','g':'g','gee':'g','ghee':'g',
+    'h':'h','aitch':'h','haitch':'h','age':'h',
+    'i':'i','eye':'i','aye':'i','j':'j','jay':'j','k':'k','kay':'k',
+    'l':'l','el':'l','ell':'l','m':'m','em':'m','n':'n','en':'n',
+    'o':'o','oh':'o','owe':'o','p':'p','pee':'p','pea':'p',
+    'q':'q','cue':'q','queue':'q','r':'r','are':'r','ar':'r',
+    's':'s','ess':'s','es':'s','t':'t','tee':'t','tea':'t',
+    'u':'u','you':'u','yew':'u','v':'v','vee':'v',
+    'w':'w','doubleyou':'w','doubleu':'w',
+    'x':'x','ex':'x','y':'y','why':'y','z':'z','zee':'z','zed':'z'
   };
   // iPhone Safari reports changing interim transcripts, sometimes without finalizing.
   // Only convert clearly recognized letter names, not arbitrary spoken whole words.
@@ -486,7 +486,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   }
   function showTranscript(transcript){
     const raw=$('heardRaw');
-    raw.textContent='Safari recognized: “'+transcript.trim().slice(0,200)+'”';
+    raw.textContent='Safari recognized: “'+transcript.trim().slice(0,200).toLowerCase()+'”';
     raw.classList.remove('hidden');
   }
   function toggleMic(){
@@ -612,8 +612,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
             matchesCurrentWordTranscript(pieces,currentWord());
           if(collapsedToWord){
             wholeWordGuess=true;
-            newestLetters=currentWord().toUpperCase();
-            const original=baseAnswer.toUpperCase().replace(/[^A-Z]/g,'');
+            newestLetters=currentWord();
+            const original=baseAnswer.toLowerCase().replace(/[^a-z]/g,'');
             $('answer').value=newestLetters.startsWith(original)?
               newestLetters:baseAnswer+newestLetters;
             $('answer').dispatchEvent(new Event('input',{bubbles:true}));
@@ -688,7 +688,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 
   function makeLetterKeyboard(){
     const letters=$('letters');
-    for(const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){
+    for(const c of 'abcdefghijklmnopqrstuvwxyz'){
       const b=document.createElement('button');b.type='button';b.className='letter';b.textContent=c;b.setAttribute('aria-label','Add '+c);
       b.addEventListener('click',()=>{if(!state.graded){$('answer').value+=c;setNotice('');}});
       letters.appendChild(b);
@@ -703,7 +703,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   $('testSoundBtn').addEventListener('click',()=>say('Sound test. Can you hear me? The spelling quiz is ready.',0.9,'welcome'));
   $('showWordBtn').addEventListener('click',()=>{
     const target=$('revealedWord');const hidden=target.classList.contains('hidden');
-    target.textContent=hidden?currentWord().toUpperCase():'';
+    target.textContent=hidden?currentWord():'';
     target.classList.toggle('hidden',!hidden);
     $('showWordBtn').textContent=hidden?'Hide word again':'Parent help: show current word';
   });
@@ -713,6 +713,13 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   $('nextBtn').addEventListener('click',next);
   $('resetBtn').addEventListener('click',resetAll);
   $('againBtn').addEventListener('click',()=>start(false));
+  $('answer').addEventListener('input',event=>{
+    const field=event.currentTarget;
+    const previous=field.value;
+    const cursor=field.selectionStart;
+    const lower=previous.toLowerCase();
+    if(previous!==lower){field.value=lower;if(cursor!==null)field.setSelectionRange(cursor,cursor);}
+  });
   $('answer').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(state.graded)next();else check();}});
   $('dictationBtn').addEventListener('click',()=>{
     stopListening();$('answer').focus();setNotice('Your keyboard should open. Tap its microphone key to dictate, then check or correct the letters before submitting. If you do not see a microphone key, enable Dictation in iPhone Settings → General → Keyboard.');
