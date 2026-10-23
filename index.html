@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v6</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v7</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -106,6 +106,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   let micWatchdogTimer = null;
   let micRecovering = false;
   let micSessionHasResult = false;
+  let micFinalizing = false;
+  let recognizedCompleteWord = false;
   let lastSpokenAt = 0;
   let activeUtterance = null; // Prevent iOS Safari from garbage collecting its speech.
   let speechCounter = 0;
@@ -138,7 +140,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   function currentId(){return state.queue[state.cursor];}
   function currentWord(){return WORDS[currentId()];}
   function setNotice(msg){$('notice').textContent=msg;}
-  function clearMicDebug(){$('heardRaw').textContent='';$('heardRaw').classList.add('hidden');}
+  function clearMicDebug(){$('heardRaw').textContent='';$('heardRaw').classList.add('hidden');recognizedCompleteWord=false;}
   function stopSpeaking(){
     speechCounter++;
     if(!hasSpeech) return;
@@ -189,13 +191,15 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     if(micRecoveryTimer!==null){clearTimeout(micRecoveryTimer);micRecoveryTimer=null;}
     if(micWatchdogTimer!==null){clearTimeout(micWatchdogTimer);micWatchdogTimer=null;}
     micRecovering=false;
+    micFinalizing=false;
     if(recognition){const old=recognition;recognition=null;try{old.abort();}catch(e){}}
     listening=false;renderMic();
   }
   function renderMic(){
     const b=$('micBtn'); b.classList.toggle('active',listening);
-    b.textContent=micRecovering?'⏳ Reconnecting microphone…':listening?'⏹ Stop listening':'🎤 Speak letters';
-    b.disabled=!hasMic || isIOSChrome || Boolean(state.graded) || micRecovering;
+    b.textContent=micRecovering?'⏳ Reconnecting microphone…':micFinalizing?'⏳ Finishing speech…':listening?'⏹ Finish listening':'🎤 Speak letters';
+    b.disabled=!hasMic || isIOSChrome || Boolean(state.graded) || micRecovering || micFinalizing;
+    $('checkBtn').disabled=Boolean(state.graded) || listening || micRecovering || micFinalizing;
     b.title=isIOSChrome?'On iPhone, open in Safari for microphone recognition':hasMic?'':'Speech recognition is not available in this browser';
   }
   function normalize(s){return s.toLowerCase().replace(/[^a-z]/g,'');}
@@ -239,10 +243,22 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   }
   function check(){
     if(state.graded)return;
-    stopListening();
+    if(listening || micFinalizing || micRecovering){
+      setNotice('Finish listening first, then review the complete letters before checking.');
+      return;
+    }
+    const id=currentId(), word=currentWord();
     const guess=normalize($('answer').value);
+    // Safety net: never count a partial letter as wrong when Safari actually
+    // returned the full word later. Let the child review and confirm instead.
+    if(guess!==word && recognizedCompleteWord){
+      $('answer').value=word.toUpperCase();
+      recognizedCompleteWord=false;
+      setNotice('Safari heard the full word but the answer field had only part of it. I filled the recognized letters in. Review what you actually spelled, then tap Check spelling again. No mistake counted.');
+      return;
+    }
     if(!guess){setNotice('Spell the word first. You can speak, type, or tap the letters.');return;}
-    const id=currentId(), word=currentWord(), correct=guess===word;
+    const correct=guess===word;
     const newlyMastered=correct&&!state.mastered.includes(id);
     if(correct){if(newlyMastered)state.mastered.push(id);}
     else{
@@ -327,7 +343,21 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     raw.classList.remove('hidden');
   }
   function toggleMic(){
-    if(listening){stopListening();setNotice('Stopped listening. Review the letters you entered.');return;}
+    if(listening){
+      if(micFinalizing)return;
+      // stop(), unlike abort(), gives Safari a chance to deliver its final
+      // speech transcription before the form can be checked.
+      micFinalizing=true;
+      renderMic();
+      setNotice('Finishing speech recognition… waiting for the final letters.');
+      try{if(recognition)recognition.stop();}catch(e){stopListening();setNotice('Could not finish recognition. Review the captured letters or use keyboard dictation.');return;}
+      micWatchdogTimer=setTimeout(()=>{
+        if(!micFinalizing)return;
+        stopListening();
+        setNotice('Safari did not finalize the speech. Review the captured letters before checking.');
+      },2700);
+      return;
+    }
     if(micRecovering)return;
     if(isIOSChrome){setNotice('Open this page in Safari for live recognition, or use the keyboard microphone below.');return;}
     if(!hasMic){setNotice('Speech recognition is unavailable. Use the iPhone keyboard microphone or tap letters.');return;}
@@ -338,12 +368,14 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     stopSpeaking();
     clearMicDebug();
     micError='';
+    micFinalizing=false;
     const baseAnswer=$('answer').value;
     const MAX_RETRIES=isIOS?2:1;
 
     function beginAttempt(attempt){
       if(state.graded||!state.started||state.cursor>=state.queue.length)return;
       micRecovering=false;
+      micFinalizing=false;
       micSessionHasResult=false;
       const number=++micCounter;
       let started=false, gotResult=false, newestLetters='', wholeWordGuess=false, error=null;
@@ -418,6 +450,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
           if(!transcript)return;
           gotResult=true;micSessionHasResult=true;
           showTranscript(transcript);
+          if(matchesCurrentWordTranscript(pieces,currentWord()))recognizedCompleteWord=true;
           const parsed=parseSpokenLetters(transcript);
           // When Safari turns spelling into a whole-word transcript, do not
           // discard it, or keep a stale first-letter guess. The browser
@@ -445,6 +478,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
           // A final transcript should release iOS audio capture promptly.
           // Leave a bounded timeout in case stop() never fires onend.
           if(anyFinal && isIOS){
+            micFinalizing=true;
+            renderMic();
             try{instance.stop();}catch(e){}
             if(micWatchdogTimer!==null)clearTimeout(micWatchdogTimer);
             micWatchdogTimer=setTimeout(()=>{
