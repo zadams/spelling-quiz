@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v3</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v4</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -60,7 +60,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     </div>
     <label class="input-label" for="answer">Your spelling</label>
     <input class="answer" type="text" id="answer" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="Enter the letters here" aria-label="Spell the word">
-    <p class="smalltext">Say letters separately (for example: “C, A, T”) or enter them in the box. Check the letters before submitting, since microphones can mishear B, D, E, and similar letters.</p>
+    <p class="smalltext">Say letters separately (for example: “C, A, T”), or use the iPhone keyboard microphone. Review the letters before checking—the browser can mishear B, D, E, and similar letters.</p>
     <div class="notice" id="notice" role="status" aria-live="polite"></div>
     <div class="smalltext heard-raw hidden" id="heardRaw" aria-live="polite"></div>
     <div class="letter-toggle"><button class="linkbtn" id="showWordBtn">Parent help: show current word</button><div id="revealedWord" class="hidden" style="font-size:21px;font-weight:800;letter-spacing:1.5px" aria-live="polite"></div></div>
@@ -68,11 +68,12 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       <button class="btn mic" id="micBtn">🎤 Speak letters</button>
       <button class="btn primary" id="checkBtn">Check spelling ✓</button>
     </div>
+    <button class="btn secondary wide" id="dictationBtn" type="button" style="margin-top:10px">⌨️ Use iPhone keyboard dictation instead</button>
+    <p class="smalltext" id="dictationHelp">Tap the button above, then tap the microphone key on the iPhone keyboard. Review what it types.</p>
     <div id="feedback" class="feedback hidden" role="status" aria-live="polite"></div>
     <button class="btn primary wide hidden" id="nextBtn" style="margin-top:15px">Next word →</button>
     <div class="letter-toggle"><button class="linkbtn" id="keyboardToggle" aria-expanded="false">Tap A–Z letters instead</button></div>
     <div class="letters hidden" id="letters" aria-label="Letter keyboard"></div>
-    <button class="linkbtn" id="dictationBtn" type="button" style="display:block;margin:7px auto">iPhone fallback: use keyboard microphone</button>
     <div class="stats"><span class="stat" id="triesStat">Keep going!</span><span class="stat" id="mistakeStat">0 words to practice again</span></div>
     <div style="text-align:right;margin-top:16px"><button class="linkbtn" id="resetBtn">Restart entire quiz</button></div>
   </section>
@@ -210,6 +211,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     $('answer').disabled=Boolean(graded);
     $('checkBtn').disabled=Boolean(graded);
     $('inputActions').classList.toggle('hidden',Boolean(graded));
+    $('dictationBtn').classList.toggle('hidden',Boolean(graded));
+    $('dictationHelp').classList.toggle('hidden',Boolean(graded));
     $('nextBtn').classList.toggle('hidden',!graded);
     $('feedback').classList.toggle('hidden',!graded);
     if(graded){
@@ -329,6 +332,10 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
         speechRecognitionStarted=true;listening=true;renderMic();
         setNotice('🎤 Listening! Say letters slowly, for example “P, E, N”, then pause.');
       };
+      recognition.onspeechstart=()=>{
+        if(number!==micCounter)return;
+        setNotice('Safari detected speech. Waiting for recognized letters…');
+      };
       recognition.onresult=(event)=>{
         if(number!==micCounter)return;
         hasResult=true;
@@ -371,8 +378,16 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       setTimeout(()=>{
         if(number!==micCounter||!recognition||hasResult||micError)return;
         if(!speechRecognitionStarted)setNotice('Safari has not activated recognition. Open this site directly in Safari and check microphone permission.');
-        else setNotice('🎤 Microphone started but Safari has returned no speech yet. If stuck, stop listening and try the keyboard microphone fallback.');
-      },8000);
+        else setNotice('🎤 Safari has started listening, but is not producing text. Waiting a little longer before switching to keyboard dictation.');
+      },5500);
+      // iOS Safari has a documented bug: speech recognition starts but never
+      // provides results or fires onerror/onend after audio playback.
+      // Recover from the stuck state rather than leaving the microphone open.
+      setTimeout(()=>{
+        if(number!==micCounter||!recognition||hasResult||micError)return;
+        stopListening();
+        setNotice('Safari speech recognition stalled: it did not return any letters. Please tap “Use iPhone keyboard dictation instead” below. This is a Safari limitation, not a spelling mistake.');
+      },11000);
     }catch(e){
       recognition=null;listening=false;renderMic();
       setNotice('Could not start recognition: '+(e.message||'browser error')+'. Use keyboard dictation instead.');
@@ -408,7 +423,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   $('againBtn').addEventListener('click',()=>start(false));
   $('answer').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(state.graded)next();else check();}});
   $('dictationBtn').addEventListener('click',()=>{
-    stopListening();$('answer').focus();setNotice('Tap the microphone on the iPhone keyboard to dictate letters. Review carefully: it may turn spelled letters into a whole word.');
+    stopListening();$('answer').focus();setNotice('Your keyboard should open. Tap its microphone key to dictate, then check or correct the letters before submitting. If you do not see a microphone key, enable Dictation in iPhone Settings → General → Keyboard.');
   });
   $('keyboardToggle').addEventListener('click',()=>{
     const letters=$('letters');const expanded=letters.classList.toggle('hidden')===false;
@@ -417,6 +432,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   });
   makeLetterKeyboard();
   if(!hasMic)$('micBtn').title='Microphone recognition is unavailable in this browser';
+  if(isIOS)$('dictationHelp').textContent='On iPhone, tap the button above and then the microphone key on the keyboard. This uses Apple Dictation rather than Safari web speech recognition.';
   if(!hasSpeech){$('repeatBtn').disabled=true;$('testSoundBtn').disabled=true;}
   if(isIOSChrome)$('welcomeNotice').textContent='On iPhone, speech recognition usually requires Safari (not Chrome or an in-app browser). Open this site in Safari.';
   if(load()?.started){$('resumeBtn').classList.remove('hidden');}
