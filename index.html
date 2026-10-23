@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Spell It! — Speaking Spelling Quiz</title>
+<style>
+:root{--ink:#1f2842;--muted:#61708b;--purple:#6753cb;--purple2:#5441b2;--lav:#f0edff;--teal:#10a89d;--good:#137b53;--bad:#a44532;--border:#e6e6f1;--paper:#fff;--shadow:0 16px 50px rgba(48,42,111,.10)}
+*{box-sizing:border-box} body{margin:0;min-height:100vh;background:radial-gradient(circle at 0% 0%,#dcf9f0 0%,transparent 32%),radial-gradient(circle at 100% 0%,#e7e0ff 0%,transparent 43%),#f8f9ff;color:var(--ink);font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+.shell{max-width:700px;margin:0 auto;padding:clamp(16px,4vw,36px) 16px 48px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:22px}
+.brand{font-weight:850;font-size:clamp(25px,5vw,34px);letter-spacing:-1.1px}.brand .pop{display:inline-block;transform:rotate(-10deg);margin-right:5px}.tag{padding:6px 11px;border-radius:99px;background:#eef5ff;color:#476382;font-weight:750;font-size:12px}
+.card{background:var(--paper);border:1px solid var(--border);border-radius:24px;padding:clamp(20px,4vw,34px);box-shadow:var(--shadow)}
+.hero{font-size:clamp(26px,5vw,37px);line-height:1.16;font-weight:830;letter-spacing:-.9px;margin:2px 0 12px}.lede{color:var(--muted);font-size:17px;margin-bottom:22px}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:26px}.feature{background:#f7f7fd;border-radius:14px;padding:13px 10px;text-align:center;color:#4e5678;font-weight:700;font-size:13px}.feature .emoji{display:block;font-size:24px;margin-bottom:4px}
+button{font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}button:focus-visible,input:focus-visible{outline:3px solid #9e8ffb;outline-offset:3px}
+.btn{border-radius:14px;border:1px solid transparent;padding:14px 17px;font-weight:800;letter-spacing:.1px;transition:transform .12s,background .12s;min-height:52px}.btn:active{transform:scale(.98)}.primary{background:var(--purple);color:white;box-shadow:0 5px 0 #493798}.primary:hover{background:var(--purple2)}.secondary{background:#f3f0ff;color:#453994;border-color:#e2dcff}.secondary:hover{background:#e9e4ff}.outline{background:#fff;color:#58607e;border-color:#d7d9e6}.outline:hover{background:#f8f8ff}.mic{background:#e7f8f4;color:#087965;border-color:#aee5d8}.mic.active{background:#c23654;border-color:#c23654;color:white;animation:pulse 1.4s infinite}.btn[disabled]{cursor:not-allowed;opacity:.48;box-shadow:none}
+@keyframes pulse{50%{box-shadow:0 0 0 7px rgba(194,54,84,.12)}}
+.wide{width:100%}.hidden{display:none !important}.progress-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#5f6690;margin-bottom:9px}.progress-bar{height:11px;border-radius:99px;background:#eae8f8;overflow:hidden}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,#20c9b3,#7c69df);transition:width .25s}
+.word-tag{display:inline-flex;gap:7px;align-items:center;border-radius:99px;background:#f1edff;color:#6550ba;padding:6px 13px;font-size:13px;font-weight:800;margin:20px 0 4px}.listen-art{margin:10px auto 12px;width:106px;height:106px;background:#edeaff;border-radius:30px;display:grid;place-items:center;font-size:47px;transform:rotate(-4deg)}.listen-art span{transform:rotate(4deg)}
+.prompt{text-align:center;font-size:clamp(24px,5vw,32px);font-weight:850;letter-spacing:-.7px;margin:10px 0 3px}.subtitle{text-align:center;color:var(--muted);margin:0 0 19px;font-size:15px}.audio-controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:22px}
+label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px}.answer{width:100%;border:2px solid #d8d5ef;border-radius:15px;background:#fcfbff;padding:15px;font-size:clamp(21px,5vw,28px);font-weight:720;letter-spacing:3px;color:#33304b;text-align:center;text-transform:uppercase;outline:none}.answer:focus{border-color:#8b79e2}.answer::placeholder{font-size:clamp(15px,3vw,18px);font-weight:500;letter-spacing:0;color:#8c90a4;text-transform:none}
+.smalltext{color:var(--muted);font-size:13px;margin-top:8px}.notice{min-height:24px;font-size:14px;color:#536484;margin:13px 0 14px;text-align:center}.buttons{display:flex;gap:10px}.buttons>*{flex:1}
+.feedback{border-radius:16px;padding:14px 15px;margin-top:14px;line-height:1.5}.feedback.good{background:#e8f8f0;border:1px solid #b3e5cb;color:#105f43}.feedback.bad{background:#fff3e7;border:1px solid #f8d7ae;color:#8d452d}.feedback strong{font-size:17px}.feedback .correct-spell{font-size:18px;letter-spacing:3px;font-weight:850;overflow-wrap:anywhere}
+.footnote{font-size:12px;color:#6d738b;line-height:1.55;margin:17px 4px}.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.stat{padding:7px 10px;border-radius:10px;background:#f4f5fc;font-size:12px;color:#545e76;font-weight:700}
+.letter-toggle{margin-top:14px;text-align:center}.linkbtn{border:none;background:transparent;color:#6053b2;text-decoration:underline;text-underline-offset:3px;font-weight:750;padding:6px}.letters{display:grid;grid-template-columns:repeat(9,1fr);gap:5px;margin-top:9px}.letter{padding:8px 0;min-height:39px;border:1px solid #d9d9eb;border-radius:8px;background:#f8f7ff;font-size:14px;font-weight:800;color:#514799}.letter:active{background:#e3ddff}
+.end-icon{font-size:64px;text-align:center}.end-title{font-size:31px;line-height:1.2;text-align:center;margin:7px 0;font-weight:850}.center{text-align:center}
+@media(max-width:430px){.features{gap:6px}.feature{padding:10px 5px;font-size:11px}.card{border-radius:20px}.btn{padding:12px 10px;font-size:14px}.buttons{gap:8px}.letters{grid-template-columns:repeat(7,1fr)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled</span></header>
+  <section class="card" id="welcome">
+    <h1 class="hero">Ready for your spelling adventure?</h1>
+    <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
+    <div class="features">
+      <div class="feature"><span class="emoji">🔊</span>Hear each word</div>
+      <div class="feature"><span class="emoji">🎤</span>Say the letters</div>
+      <div class="feature"><span class="emoji">🔁</span>Try again</div>
+    </div>
+    <button class="btn primary wide" id="startBtn">Let's start! →</button>
+    <button class="btn outline wide hidden" id="resumeBtn" style="margin-top:12px">Resume where I left off</button>
+    <p class="footnote">Microphone spelling works in compatible browsers with microphone permission. You can always type or tap the letters instead. No recordings are saved by this page.</p>
+  </section>
+  <section class="card hidden" id="practice">
+    <div class="progress-head"><span id="phase">First round</span><span id="mastered">0 / 20 mastered</span></div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="word-tag" id="wordLabel">🔈 Word 1 of 20</div>
+    <div class="listen-art" aria-hidden="true"><span>👂</span></div>
+    <h1 class="prompt">Listen, then spell!</h1>
+    <p class="subtitle">The word is spoken, not shown until you check.</p>
+    <div class="audio-controls">
+      <button class="btn secondary" id="repeatBtn">🔊 Hear word again</button>
+      <button class="btn outline" id="restartWordBtn">↻ Start word over</button>
+    </div>
+    <label class="input-label" for="answer">Your spelling</label>
+    <input class="answer" type="text" id="answer" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="Enter the letters here" aria-label="Spell the word">
+    <p class="smalltext">Say letters separately (for example: “C, A, T”) or enter them in the box. Check the letters before submitting, since microphones can mishear B, D, E, and similar letters.</p>
+    <div class="notice" id="notice" role="status" aria-live="polite"></div>
+    <div class="buttons" id="inputActions">
+      <button class="btn mic" id="micBtn">🎤 Speak letters</button>
+      <button class="btn primary" id="checkBtn">Check spelling ✓</button>
+    </div>
+    <div id="feedback" class="feedback hidden" role="status" aria-live="polite"></div>
+    <button class="btn primary wide hidden" id="nextBtn" style="margin-top:15px">Next word →</button>
+    <div class="letter-toggle"><button class="linkbtn" id="keyboardToggle" aria-expanded="false">Tap A–Z letters instead</button></div>
+    <div class="letters hidden" id="letters" aria-label="Letter keyboard"></div>
+    <div class="stats"><span class="stat" id="triesStat">Keep going!</span><span class="stat" id="mistakeStat">0 words to practice again</span></div>
+    <div style="text-align:right;margin-top:16px"><button class="linkbtn" id="resetBtn">Restart entire quiz</button></div>
+  </section>
+  <section class="card hidden" id="finished">
+    <div class="end-icon" aria-hidden="true">🏆</div>
+    <h1 class="end-title">Amazing work!</h1>
+    <p class="lede center">You spelled all 20 words correctly. Every tricky word got another turn!</p>
+    <div class="stats" id="endStats" style="justify-content:center;margin-bottom:23px"></div>
+    <button class="btn primary wide" id="againBtn">Shuffle and practice again ↻</button>
+  </section>
+</main>
+<script>
+(() => {
+  'use strict';
+  // The handwritten numbering is irrelevant; every new quiz shuffles the words.
+  const WORDS = [
+    'afternoon','buckets','comfortable','curiosity','daydream',
+    'evening','excitement','flippers','intelligent','kindness',
+    'ladders','painter','penguin','quietly','radio',
+    'refrigerator','science','shadows','voice','whiskers'
+  ];
+  const KEY = 'spelling-quiz-2026-oct22-randomized-v2';
+  const $ = id => document.getElementById(id);
+  const w = $('welcome'), p = $('practice'), f = $('finished');
+  let state = freshState();
+  let recognition = null;
+  let listening = false;
+  let micError = '';
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const hasSpeech = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  const hasMic = Boolean(SpeechRecognition);
+
+  function shuffledWordIds(){
+    const ids=WORDS.map((_,i)=>i);
+    for(let i=ids.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [ids[i],ids[j]]=[ids[j],ids[i]];
+    }
+    return ids;
+  }
+  function freshState(){ return {queue:shuffledWordIds(), cursor:0, mastered:[], mistakes:0, errorCounts:{}, graded:null, started:false}; }
+  function store(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+  function load(){
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY)||'null');
+      if (v && Array.isArray(v.queue) && v.queue.length >= 20 && Array.isArray(v.mastered) && Number.isInteger(v.cursor) && v.cursor >= 0 && v.cursor <= v.queue.length && v.queue.every(n=>Number.isInteger(n)&&n>=0&&n<20)) return v;
+    } catch(e) {}
+    return null;
+  }
+  function show(section){[w,p,f].forEach(node=>node.classList.add('hidden'));section.classList.remove('hidden');}
+  function currentId(){return state.queue[state.cursor];}
+  function currentWord(){return WORDS[currentId()];}
+  function setNotice(msg){$('notice').textContent=msg;}
+  function say(text, rate=0.91){
+    if (!hasSpeech){setNotice('Sound is unavailable in this browser. Please use Safari or Chrome.');return;}
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang='en-US';u.rate=rate;u.pitch=1.05;
+      const voices=speechSynthesis.getVoices();
+      const v=voices.find(x=>x.lang==='en-US'&&/Samantha|Google US English|Jenny|Aria|Ava/i.test(x.name)) || voices.find(x=>x.lang==='en-US') || voices.find(x=>x.lang.startsWith('en'));
+      if(v) u.voice=v;
+      speechSynthesis.speak(u);
+    }catch(e){setNotice('Sound could not play. Try your browser’s audio settings.');}
+  }
+  function speakWord(){
+    if (!state.started || state.cursor>=state.queue.length)return;
+    say('Your word is ' + currentWord() + '. Spell ' + currentWord() + '.');
+  }
+  function stopListening(){
+    if(recognition){try{recognition.abort();}catch(e){} recognition=null;}
+    listening=false;renderMic();
+  }
+  function renderMic(){
+    const b=$('micBtn'); b.classList.toggle('active',listening);
+    b.textContent=listening?'⏹ Stop listening':'🎤 Speak letters';
+    b.disabled=!hasMic || Boolean(state.graded);
+    b.title=hasMic?'':'Speech recognition is not available in this browser';
+  }
+  function normalize(s){return s.toLowerCase().replace(/[^a-z]/g,'');}
+  function start(resume){
+    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    state=resume && load() || freshState(); state.started=true;
+    store(); render(); speakWord();
+  }
+  function render(){
+    if(state.cursor>=state.queue.length){show(f);renderFinished();return;}
+    show(p);
+    $('phase').textContent=state.cursor<20?'Shuffled first round':'Missed-word practice';
+    $('wordLabel').textContent=state.cursor<20?'🔈 Word '+(state.cursor+1)+' of 20':'🔁 Practice word '+(state.cursor-19);
+    $('mastered').textContent=state.mastered.length+' / 20 mastered';
+    $('progressFill').style.width=(state.mastered.length/20*100)+'%';
+    $('triesStat').textContent=state.cursor<20?'First-round word '+(state.cursor+1):'Keep practicing!';
+    $('mistakeStat').textContent=(20-state.mastered.length)+' still to master';
+    const graded=state.graded;
+    $('answer').disabled=Boolean(graded);
+    $('checkBtn').disabled=Boolean(graded);
+    $('inputActions').classList.toggle('hidden',Boolean(graded));
+    $('nextBtn').classList.toggle('hidden',!graded);
+    $('feedback').classList.toggle('hidden',!graded);
+    if(graded){
+      const word=currentWord();const result=graded.correct;
+      $('feedback').className='feedback '+(result?'good':'bad');
+      $('feedback').innerHTML=result?
+        '<strong>✅ You got it!</strong><div>'+word.replaceAll('&','&amp;')+' is spelled correctly.</div>':
+        '<strong>💡 Good try!</strong><div>The correct spelling is:</div><div class="correct-spell">'+word.toUpperCase().split('').join(' · ')+'</div><div>You’ll get to practice this word again.</div>';
+      $('nextBtn').textContent=(state.cursor===state.queue.length-1 && result && state.mastered.length===20)?'See my results 🏆':'Next word →';
+    }else{$('feedback').className='feedback hidden';$('feedback').textContent='';}
+    renderMic();
+  }
+  function renderFinished(){
+    $('endStats').innerHTML='<span class="stat">✅ 20 words mastered</span><span class="stat">🔄 '+state.mistakes+' incorrect attempts practiced</span>';
+    if(hasSpeech)say('You did it! You spelled all twenty words. Great job!');
+  }
+  function check(){
+    if(state.graded)return;
+    stopListening();
+    const guess=normalize($('answer').value);
+    if(!guess){setNotice('Spell the word first. You can speak, type, or tap the letters.');return;}
+    const id=currentId(), word=currentWord(), correct=guess===word;
+    const newlyMastered=correct&&!state.mastered.includes(id);
+    if(correct){if(newlyMastered)state.mastered.push(id);}
+    else{
+      state.queue.push(id);
+      state.mistakes++;
+      state.errorCounts[id]=(state.errorCounts[id]||0)+1;
+    }
+    state.graded={correct,newlyMastered};
+    store();setNotice('');render();
+    if(correct) say('That is right! You spelled '+word+' correctly. Great job!');
+    else say('Nice try! The correct spelling is: '+word.toUpperCase().split('').join('. ')+'. You will practice this one again.',0.82);
+  }
+  function next(){
+    if(!state.graded)return;
+    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    state.cursor++;state.graded=null;store();
+    $('answer').value='';setNotice('');render();
+    if(state.cursor<state.queue.length)speakWord();
+  }
+  function restartWord(){
+    if(!state.started || state.cursor>=state.queue.length)return;
+    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    // A do-over rolls back the current submitted answer, if any. No mistake is charged.
+    const graded=state.graded;
+    if(graded){
+      const id=currentId();
+      if(graded.correct && graded.newlyMastered)state.mastered=state.mastered.filter(x=>x!==id);
+      if(!graded.correct){
+        if(state.queue[state.queue.length-1]===id)state.queue.pop();
+        state.mistakes=Math.max(0,state.mistakes-1);
+        state.errorCounts[id]=Math.max(0,(state.errorCounts[id]||0)-1);
+      }
+      state.graded=null;
+    }
+    $('answer').value='';setNotice('Starting this word over. Listen again!');
+    store();render();speakWord();
+  }
+  function resetAll(){
+    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    if(!confirm('Start the whole quiz over? Your current progress will be cleared.'))return;
+    state=freshState();store();$('answer').value='';setNotice('');show(w);
+    $('resumeBtn').classList.add('hidden');
+  }
+  const names={
+    'a':'A','ay':'A','eh':'A','b':'B','bee':'B','be':'B',
+    'c':'C','cee':'C','sea':'C','see':'C','si':'C',
+    'd':'D','dee':'D','de':'D','e':'E','ee':'E',
+    'f':'F','ef':'F','eff':'F','g':'G','gee':'G','ghee':'G',
+    'h':'H','aitch':'H','haitch':'H','age':'H',
+    'i':'I','eye':'I','aye':'I','j':'J','jay':'J','k':'K','kay':'K',
+    'l':'L','el':'L','ell':'L','m':'M','em':'M','n':'N','en':'N',
+    'o':'O','oh':'O','owe':'O','p':'P','pee':'P','pea':'P',
+    'q':'Q','cue':'Q','queue':'Q','r':'R','are':'R','ar':'R',
+    's':'S','ess':'S','es':'S','t':'T','tee':'T','tea':'T',
+    'u':'U','you':'U','yew':'U','v':'V','vee':'V',
+    'w':'W','doubleyou':'W','doubleu':'W',
+    'x':'X','ex':'X','y':'Y','why':'Y','z':'Z','zee':'Z','zed':'Z'
+  };
+  function hearLetters(transcript){
+    const normalized=transcript.toLowerCase().replace(/double\s+(you|u)/g,'doubleyou').replace(/[^a-z\s]/g,' ');
+    const tokens=normalized.split(/\s+/).filter(Boolean);
+    const letters=[];const unknown=[];
+    for(const token of tokens){
+      if(['letter','letters','and','done','stop','okay','ok','the','is','spell','spelled'].includes(token))continue;
+      if(names[token])letters.push(names[token]);
+      else unknown.push(token);
+    }
+    // Do not silently accept an ASR guess of the whole word as spelled letters.
+    if(unknown.length || !letters.length){
+      setNotice('I heard “'+transcript.trim().slice(0,90)+'”. Please say the letters separately, or type them if the microphone mixed them up.');
+      return;
+    }
+    $('answer').value+=letters.join('');
+    setNotice('Heard '+letters.join(' · ')+'. Check that the letters look right, then press Check spelling.');
+  }
+  function toggleMic(){
+    if(listening){stopListening();setNotice('Stopped listening. Check the letters you entered.');return;}
+    if(!hasMic){setNotice('This browser does not support microphone spelling. You can type or tap letters instead.');return;}
+    if(state.graded)return;
+    if(hasSpeech)speechSynthesis.cancel();
+    micError='';
+    try{
+      recognition=new SpeechRecognition();
+      recognition.lang='en-US';recognition.continuous=true;recognition.interimResults=false;
+      recognition.onresult=(event)=>{
+        for(let i=event.resultIndex;i<event.results.length;i++){
+          if(event.results[i].isFinal) hearLetters(event.results[i][0].transcript);
+        }
+      };
+      recognition.onerror=(event)=>{
+        micError=event.error;
+        if(event.error==='not-allowed'||event.error==='service-not-allowed')setNotice('Microphone permission was denied. Allow microphone access in your browser, or type your spelling.');
+        else if(event.error==='no-speech')setNotice('I did not hear any letters. Try again or type your spelling.');
+        else if(event.error!=='aborted')setNotice('Microphone error: '+event.error+'. You can type your spelling instead.');
+      };
+      recognition.onend=()=>{
+        listening=false;recognition=null;renderMic();
+        if(!micError) setNotice('Finished listening. Check your letters before submitting.');
+      };
+      recognition.start();listening=true;renderMic();setNotice('Listening! Say one letter at a time, clearly.');
+    }catch(e){recognition=null;listening=false;renderMic();setNotice('Could not start the microphone. Type or tap your letters instead.');}
+  }
+  function makeLetterKeyboard(){
+    const letters=$('letters');
+    for(const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){
+      const b=document.createElement('button');b.type='button';b.className='letter';b.textContent=c;b.setAttribute('aria-label','Add '+c);
+      b.addEventListener('click',()=>{if(!state.graded){$('answer').value+=c;setNotice('');}});
+      letters.appendChild(b);
+    }
+    const back=document.createElement('button');back.type='button';back.className='letter';back.textContent='⌫';back.setAttribute('aria-label','Delete last letter');
+    back.addEventListener('click',()=>{if(!state.graded)$('answer').value=$('answer').value.slice(0,-1);});
+    letters.appendChild(back);
+  }
+  $('startBtn').addEventListener('click',()=>start(false));
+  $('resumeBtn').addEventListener('click',()=>start(true));
+  $('repeatBtn').addEventListener('click',()=>{stopListening();speakWord();});
+  $('restartWordBtn').addEventListener('click',restartWord);
+  $('micBtn').addEventListener('click',toggleMic);
+  $('checkBtn').addEventListener('click',check);
+  $('nextBtn').addEventListener('click',next);
+  $('resetBtn').addEventListener('click',resetAll);
+  $('againBtn').addEventListener('click',()=>start(false));
+  $('answer').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(state.graded)next();else check();}});
+  $('keyboardToggle').addEventListener('click',()=>{
+    const letters=$('letters');const expanded=letters.classList.toggle('hidden')===false;
+    $('keyboardToggle').setAttribute('aria-expanded',String(expanded));
+    $('keyboardToggle').textContent=expanded?'Hide letter buttons':'Tap A–Z letters instead';
+  });
+  makeLetterKeyboard();
+  if(!hasMic)$('micBtn').title='Microphone recognition is unavailable in this browser';
+  if(!hasSpeech)$('repeatBtn').disabled=true;
+  if(load()?.started){$('resumeBtn').classList.remove('hidden');}
+})();
+</script>
+</body>
+</html>
