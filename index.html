@@ -21,7 +21,7 @@ button{font:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlig
 .word-tag{display:inline-flex;gap:7px;align-items:center;border-radius:99px;background:#f1edff;color:#6550ba;padding:6px 13px;font-size:13px;font-weight:800;margin:20px 0 4px}.listen-art{margin:10px auto 12px;width:106px;height:106px;background:#edeaff;border-radius:30px;display:grid;place-items:center;font-size:47px;transform:rotate(-4deg)}.listen-art span{transform:rotate(4deg)}
 .prompt{text-align:center;font-size:clamp(24px,5vw,32px);font-weight:850;letter-spacing:-.7px;margin:10px 0 3px}.subtitle{text-align:center;color:var(--muted);margin:0 0 19px;font-size:15px}.audio-controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:22px}
 label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px}.answer{width:100%;border:2px solid #d8d5ef;border-radius:15px;background:#fcfbff;padding:15px;font-size:clamp(21px,5vw,28px);font-weight:720;letter-spacing:3px;color:#33304b;text-align:center;text-transform:uppercase;outline:none}.answer:focus{border-color:#8b79e2}.answer::placeholder{font-size:clamp(15px,3vw,18px);font-weight:500;letter-spacing:0;color:#8c90a4;text-transform:none}
-.smalltext{color:var(--muted);font-size:13px;margin-top:8px}.notice{min-height:24px;font-size:14px;color:#536484;margin:13px 0 14px;text-align:center}.buttons{display:flex;gap:10px}.buttons>*{flex:1}
+.smalltext{color:var(--muted);font-size:13px;margin-top:8px}.notice{min-height:24px;font-size:14px;color:#536484;margin:13px 0 14px;text-align:center}.heard-raw{background:#f1f4ff;border-radius:10px;padding:9px 12px;overflow-wrap:anywhere}.buttons{display:flex;gap:10px}.buttons>*{flex:1}
 .feedback{border-radius:16px;padding:14px 15px;margin-top:14px;line-height:1.5}.feedback.good{background:#e8f8f0;border:1px solid #b3e5cb;color:#105f43}.feedback.bad{background:#fff3e7;border:1px solid #f8d7ae;color:#8d452d}.feedback strong{font-size:17px}.feedback .correct-spell{font-size:18px;letter-spacing:3px;font-weight:850;overflow-wrap:anywhere}
 .footnote{font-size:12px;color:#6d738b;line-height:1.55;margin:17px 4px}.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.stat{padding:7px 10px;border-radius:10px;background:#f4f5fc;font-size:12px;color:#545e76;font-weight:700}
 .letter-toggle{margin-top:14px;text-align:center}.linkbtn{border:none;background:transparent;color:#6053b2;text-decoration:underline;text-underline-offset:3px;font-weight:750;padding:6px}.letters{display:grid;grid-template-columns:repeat(9,1fr);gap:5px;margin-top:9px}.letter{padding:8px 0;min-height:39px;border:1px solid #d9d9eb;border-radius:8px;background:#f8f7ff;font-size:14px;font-weight:800;color:#514799}.letter:active{background:#e3ddff}
@@ -32,7 +32,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
 </head>
 <body>
 <main class="shell">
-  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled</span></header>
+  <header class="top"><div class="brand"><span class="pop" aria-hidden="true">🐧</span> Spell It!</div><span class="tag">20 words · shuffled · v3</span></header>
   <section class="card" id="welcome">
     <h1 class="hero">Ready for your spelling adventure?</h1>
     <p class="lede">I'll say the words in a new random order each time. Spell them out loud or type the letters. Missed words come back until you get them right!</p>
@@ -62,6 +62,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     <input class="answer" type="text" id="answer" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="Enter the letters here" aria-label="Spell the word">
     <p class="smalltext">Say letters separately (for example: “C, A, T”) or enter them in the box. Check the letters before submitting, since microphones can mishear B, D, E, and similar letters.</p>
     <div class="notice" id="notice" role="status" aria-live="polite"></div>
+    <div class="smalltext heard-raw hidden" id="heardRaw" aria-live="polite"></div>
     <div class="letter-toggle"><button class="linkbtn" id="showWordBtn">Parent help: show current word</button><div id="revealedWord" class="hidden" style="font-size:21px;font-weight:800;letter-spacing:1.5px" aria-live="polite"></div></div>
     <div class="buttons" id="inputActions">
       <button class="btn mic" id="micBtn">🎤 Speak letters</button>
@@ -71,6 +72,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     <button class="btn primary wide hidden" id="nextBtn" style="margin-top:15px">Next word →</button>
     <div class="letter-toggle"><button class="linkbtn" id="keyboardToggle" aria-expanded="false">Tap A–Z letters instead</button></div>
     <div class="letters hidden" id="letters" aria-label="Letter keyboard"></div>
+    <button class="linkbtn" id="dictationBtn" type="button" style="display:block;margin:7px auto">iPhone fallback: use keyboard microphone</button>
     <div class="stats"><span class="stat" id="triesStat">Keep going!</span><span class="stat" id="mistakeStat">0 words to practice again</span></div>
     <div style="text-align:right;margin-top:16px"><button class="linkbtn" id="resetBtn">Restart entire quiz</button></div>
   </section>
@@ -130,13 +132,14 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   function currentId(){return state.queue[state.cursor];}
   function currentWord(){return WORDS[currentId()];}
   function setNotice(msg){$('notice').textContent=msg;}
+  function clearMicDebug(){$('heardRaw').textContent='';$('heardRaw').classList.add('hidden');}
   function stopSpeaking(){
     speechCounter++;
     if(!hasSpeech) return;
     try{ if(window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel(); }catch(e){}
     activeUtterance=null;
   }
-  function say(text, rate=0.91, destination='practice'){
+  function say(text, rate=0.91, destination='practice', after=null){
     const status = destination==='welcome' ? $('welcomeNotice') : $('notice');
     if(!hasSpeech){status.textContent='This browser does not offer spoken audio. On iPhone, open in Safari or have a parent read the word.';return;}
     const number=++speechCounter;
@@ -154,7 +157,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
         // Let iOS pick its default English voice: selecting a specific voice can
         // fail silently, especially when getVoices() is still loading.
         u.onstart=()=>{ if(number!==speechCounter)return; speechStarted=true;status.textContent='🔊 Speaking now…'; };
-        u.onend=()=>{ if(number!==speechCounter)return;status.textContent=destination==='welcome'?'Did you hear the sound test? If not, check media volume and try Safari.':'';activeUtterance=null; };
+        u.onend=()=>{ if(number!==speechCounter)return;status.textContent=destination==='welcome'?'Did you hear the sound test? If not, check media volume and try Safari.':'';activeUtterance=null; if(typeof after==='function')setTimeout(()=>{if(number===speechCounter)after();},1250); };
         u.onerror=(event)=>{ if(number!==speechCounter)return;status.textContent='Audio could not play ('+(event.error||'speech error')+'). Check volume or try Safari. You can still type the letters.';activeUtterance=null; };
         if(window.speechSynthesis.paused) window.speechSynthesis.resume();
         window.speechSynthesis.speak(u);
@@ -190,7 +193,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   function start(resume){
     stopListening();stopSpeaking();
     state=resume && load() || freshState(); state.started=true;
-    store(); render(); speakWord();
+    clearMicDebug();store(); render(); speakWord();
   }
   function render(){
     if(state.cursor>=state.queue.length){show(f);renderFinished();return;}
@@ -239,13 +242,13 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     state.graded={correct,newlyMastered};
     store();setNotice('');render();
     if(correct) say('That is right! You spelled '+word+' correctly. Great job!');
-    else say('Nice try! The correct spelling is: '+word.toUpperCase().split('').join('. ')+'. You will practice this one again.',0.82);
+    else say('Nice try! The correct spelling is: '+word.toUpperCase().split('').join('. ')+'.',0.82,'practice',()=>say('You will practice this one again.',0.9));
   }
   function next(){
     if(!state.graded)return;
     stopListening();stopSpeaking();
     state.cursor++;state.graded=null;store();
-    $('answer').value='';setNotice('');render();
+    $('answer').value='';clearMicDebug();setNotice('');render();
     if(state.cursor<state.queue.length)speakWord();
   }
   function restartWord(){
@@ -263,7 +266,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       }
       state.graded=null;
     }
-    $('answer').value='';setNotice('Starting this word over. Listen again!');
+    $('answer').value='';clearMicDebug();setNotice('Starting this word over. Listen again!');
     store();render();speakWord();
   }
   function resetAll(){
@@ -287,69 +290,93 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     'w':'W','doubleyou':'W','doubleu':'W',
     'x':'X','ex':'X','y':'Y','why':'Y','z':'Z','zee':'Z','zed':'Z'
   };
-  function hearLetters(transcript){
+  // iPhone Safari reports changing interim transcripts, sometimes without finalizing.
+  // Only convert clearly recognized letter names, not arbitrary spoken whole words.
+  function parseSpokenLetters(transcript){
     const normalized=transcript.toLowerCase().replace(/double\s+(you|u)/g,'doubleyou').replace(/[^a-z\s]/g,' ');
     const tokens=normalized.split(/\s+/).filter(Boolean);
-    const letters=[];const unknown=[];
+    const letters=[], unknown=[];
     for(const token of tokens){
-      if(['letter','letters','and','done','stop','okay','ok','the','is','spell','spelled'].includes(token))continue;
+      if(['letter','letters','and','done','stop','okay','ok','the','is','spell','spelled','period','comma'].includes(token))continue;
       if(names[token])letters.push(names[token]);
       else unknown.push(token);
     }
-    // Do not silently accept an ASR guess of the whole word as spelled letters.
-    if(unknown.length || !letters.length){
-      setNotice('I heard “'+transcript.trim().slice(0,90)+'”. Please say the letters separately, or type them if the microphone mixed them up.');
-      return;
-    }
-    $('answer').value+=letters.join('');
-    setNotice('Heard '+letters.join(' · ')+'. Check that the letters look right, then press Check spelling.');
+    return {letters:letters.join(''),unknown};
+  }
+  function showTranscript(transcript){
+    const raw=$('heardRaw');
+    raw.textContent='Safari recognized: “'+transcript.trim().slice(0,200)+'”';
+    raw.classList.remove('hidden');
   }
   function toggleMic(){
     if(listening){stopListening();setNotice('Stopped listening. Check the letters you entered.');return;}
-    if(isIOSChrome){setNotice('iPhone Chrome and in-app browsers may not support speech recognition. Open this exact page in Safari, or type the letters.');return;}
-    if(!hasMic){setNotice('This browser does not support speech recognition. On iPhone use Safari, or type/tap the letters.');return;}
+    if(isIOSChrome){setNotice('On iPhone, open this site in Safari to try live recognition, or use the keyboard microphone below.');return;}
+    if(!hasMic){setNotice('Live speech recognition is unavailable. Use the iPhone keyboard microphone or tap letters.');return;}
     if(state.graded)return;
     stopSpeaking();
-    micError='';
+    micError='';clearMicDebug();
     const number=++micCounter;
-    let speechRecognitionStarted=false;
+    const baseAnswer=$('answer').value; // Appending another microphone segment should never duplicate earlier letters.
+    let speechRecognitionStarted=false, hasResult=false, latestLetters='';
     try{
       recognition=new SpeechRecognition();
       recognition.lang='en-US';
-      // iOS WebKit is less reliable with continuous recognition. Use a short,
-      // single utterance; the child can tap Speak letters again to append more.
       recognition.continuous=!isIOS;
-      recognition.interimResults=false;
+      recognition.interimResults=true;
+      recognition.maxAlternatives=1;
       recognition.onstart=()=>{
         if(number!==micCounter)return;
-        speechRecognitionStarted=true;listening=true;renderMic();setNotice('🎤 Listening! Say a few letters slowly, then pause. You can tap again to add more.');
+        speechRecognitionStarted=true;listening=true;renderMic();
+        setNotice('🎤 Listening! Say letters slowly, for example “P, E, N”, then pause.');
       };
       recognition.onresult=(event)=>{
         if(number!==micCounter)return;
-        for(let i=event.resultIndex;i<event.results.length;i++){
-          if(event.results[i].isFinal) hearLetters(event.results[i][0].transcript);
+        hasResult=true;
+        const pieces=[];
+        for(let i=0;i<event.results.length;i++){
+          const candidate=event.results[i][0];
+          if(candidate && candidate.transcript)pieces.push(candidate.transcript);
+        }
+        const transcript=pieces.join(' ').trim();
+        if(!transcript)return;
+        showTranscript(transcript);
+        const parsed=parseSpokenLetters(transcript);
+        if(parsed.letters){
+          latestLetters=parsed.letters;
+          $('answer').value=baseAnswer+latestLetters;
+          $('answer').dispatchEvent(new Event('input',{bubbles:true}));
+          setNotice('Heard '+latestLetters.split('').join(' · ')+(parsed.unknown.length?'. Some words were unclear; review or edit the letters.':'. Check the letters before submitting.'));
+        }else{
+          setNotice('Safari heard speech but could not identify individual letters. See its transcript below. Try pausing between letters or use keyboard dictation.');
         }
       };
       recognition.onerror=(event)=>{
         if(number!==micCounter)return;
-        micError=event.error;
-        if(event.error==='not-allowed'||event.error==='service-not-allowed')setNotice('Safari denied speech recognition. Check the site microphone permission, or enter the letters manually.');
-        else if(event.error==='no-speech')setNotice('I did not hear any letters. Tap Speak letters and try again, or type instead.');
-        else if(event.error!=='aborted')setNotice('Microphone failed: '+event.error+'. You can type or tap the letters instead.');
+        micError=event.error||'unknown';
+        if(micError==='not-allowed'||micError==='service-not-allowed')setNotice('Safari blocked recognition. Check Safari site microphone permission or use keyboard dictation.');
+        else if(micError==='no-speech')setNotice('Safari did not detect speech. Tap Speak letters to retry or use keyboard dictation.');
+        else if(micError!=='aborted')setNotice('Microphone error: '+micError+'. Use keyboard dictation or tap the letters.');
       };
       recognition.onend=()=>{
         if(number!==micCounter)return;
         listening=false;recognition=null;renderMic();
-        if(!micError) setNotice('Stopped listening. Review the letters above, then check spelling (or tap Speak letters again).');
+        if(!micError){
+          if(!hasResult)setNotice('Safari stopped without recognized speech. Try again, or use the iPhone keyboard microphone below.');
+          else if(latestLetters)setNotice('Captured '+latestLetters.split('').join(' · ')+'. Review or edit the letters, then tap Check spelling.');
+          else setNotice('Safari heard speech but could not identify letters. See its transcript below; try again or use keyboard dictation.');
+        }
       };
       setNotice('Requesting microphone… allow access if Safari asks.');
       recognition.start();listening=true;renderMic();
       setTimeout(()=>{
-        if(number===micCounter && recognition && !speechRecognitionStarted){
-          setNotice('The microphone may not have started. If the iPhone never requests access, open in Safari or type the letters.');
-        }
-      },6000);
-    }catch(e){recognition=null;listening=false;renderMic();setNotice('Could not start recognition: '+(e.message||'browser error')+'. Type or tap letters instead.');}
+        if(number!==micCounter||!recognition||hasResult||micError)return;
+        if(!speechRecognitionStarted)setNotice('Safari has not activated recognition. Open this site directly in Safari and check microphone permission.');
+        else setNotice('🎤 Microphone started but Safari has returned no speech yet. If stuck, stop listening and try the keyboard microphone fallback.');
+      },8000);
+    }catch(e){
+      recognition=null;listening=false;renderMic();
+      setNotice('Could not start recognition: '+(e.message||'browser error')+'. Use keyboard dictation instead.');
+    }
   }
 
   function makeLetterKeyboard(){
@@ -380,6 +407,9 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   $('resetBtn').addEventListener('click',resetAll);
   $('againBtn').addEventListener('click',()=>start(false));
   $('answer').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(state.graded)next();else check();}});
+  $('dictationBtn').addEventListener('click',()=>{
+    stopListening();$('answer').focus();setNotice('Tap the microphone on the iPhone keyboard to dictate letters. Review carefully: it may turn spelled letters into a whole word.');
+  });
   $('keyboardToggle').addEventListener('click',()=>{
     const letters=$('letters');const expanded=letters.classList.toggle('hidden')===false;
     $('keyboardToggle').setAttribute('aria-expanded',String(expanded));
