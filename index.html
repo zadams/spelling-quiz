@@ -42,6 +42,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
       <div class="feature"><span class="emoji">🔁</span>Try again</div>
     </div>
     <button class="btn primary wide" id="startBtn">Let's start! →</button>
+    <button class="btn secondary wide" id="testSoundBtn" style="margin-top:12px">🔊 Test sound first</button>
+    <p class="notice" id="welcomeNotice" role="status" aria-live="polite">For spoken words and microphone spelling on iPhone, open this site in Safari, not inside an app.</p>
     <button class="btn outline wide hidden" id="resumeBtn" style="margin-top:12px">Resume where I left off</button>
     <p class="footnote">Microphone spelling works in compatible browsers with microphone permission. You can always type or tap the letters instead. No recordings are saved by this page.</p>
   </section>
@@ -60,6 +62,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     <input class="answer" type="text" id="answer" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="Enter the letters here" aria-label="Spell the word">
     <p class="smalltext">Say letters separately (for example: “C, A, T”) or enter them in the box. Check the letters before submitting, since microphones can mishear B, D, E, and similar letters.</p>
     <div class="notice" id="notice" role="status" aria-live="polite"></div>
+    <div class="letter-toggle"><button class="linkbtn" id="showWordBtn">Parent help: show current word</button><div id="revealedWord" class="hidden" style="font-size:21px;font-weight:800;letter-spacing:1.5px" aria-live="polite"></div></div>
     <div class="buttons" id="inputActions">
       <button class="btn mic" id="micBtn">🎤 Speak letters</button>
       <button class="btn primary" id="checkBtn">Check spelling ✓</button>
@@ -89,13 +92,19 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     'ladders','painter','penguin','quietly','radio',
     'refrigerator','science','shadows','voice','whiskers'
   ];
-  const KEY = 'spelling-quiz-2026-oct22-randomized-v2';
+  const KEY = 'spelling-quiz-2026-oct22-randomized-v2'; // Preserve saved progress from first deployment.
   const $ = id => document.getElementById(id);
   const w = $('welcome'), p = $('practice'), f = $('finished');
   let state = freshState();
   let recognition = null;
   let listening = false;
   let micError = '';
+  let activeUtterance = null; // Prevent iOS Safari from garbage collecting its speech.
+  let speechCounter = 0;
+  let micCounter = 0;
+  let speechStarted = false;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  const isIOSChrome = isIOS && /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const hasSpeech = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
   const hasMic = Boolean(SpeechRecognition);
@@ -121,35 +130,65 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   function currentId(){return state.queue[state.cursor];}
   function currentWord(){return WORDS[currentId()];}
   function setNotice(msg){$('notice').textContent=msg;}
-  function say(text, rate=0.91){
-    if (!hasSpeech){setNotice('Sound is unavailable in this browser. Please use Safari or Chrome.');return;}
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang='en-US';u.rate=rate;u.pitch=1.05;
-      const voices=speechSynthesis.getVoices();
-      const v=voices.find(x=>x.lang==='en-US'&&/Samantha|Google US English|Jenny|Aria|Ava/i.test(x.name)) || voices.find(x=>x.lang==='en-US') || voices.find(x=>x.lang.startsWith('en'));
-      if(v) u.voice=v;
-      speechSynthesis.speak(u);
-    }catch(e){setNotice('Sound could not play. Try your browser’s audio settings.');}
+  function stopSpeaking(){
+    speechCounter++;
+    if(!hasSpeech) return;
+    try{ if(window.speechSynthesis.speaking || window.speechSynthesis.pending) window.speechSynthesis.cancel(); }catch(e){}
+    activeUtterance=null;
   }
+  function say(text, rate=0.91, destination='practice'){
+    const status = destination==='welcome' ? $('welcomeNotice') : $('notice');
+    if(!hasSpeech){status.textContent='This browser does not offer spoken audio. On iPhone, open in Safari or have a parent read the word.';return;}
+    const number=++speechCounter;
+    // Safari can silently discard the next utterance when cancel() is called
+    // immediately before speak(). Do not cancel unless another is still active.
+    const busy=window.speechSynthesis.speaking || window.speechSynthesis.pending;
+    if(busy){try{window.speechSynthesis.cancel();}catch(e){}}
+    speechStarted=false;
+    const play=()=>{
+      if(number!==speechCounter)return;
+      try{
+        const u=new SpeechSynthesisUtterance(text);
+        activeUtterance=u;
+        u.lang='en-US';u.rate=rate;u.pitch=1;
+        // Let iOS pick its default English voice: selecting a specific voice can
+        // fail silently, especially when getVoices() is still loading.
+        u.onstart=()=>{ if(number!==speechCounter)return; speechStarted=true;status.textContent='🔊 Speaking now…'; };
+        u.onend=()=>{ if(number!==speechCounter)return;status.textContent=destination==='welcome'?'Did you hear the sound test? If not, check media volume and try Safari.':'';activeUtterance=null; };
+        u.onerror=(event)=>{ if(number!==speechCounter)return;status.textContent='Audio could not play ('+(event.error||'speech error')+'). Check volume or try Safari. You can still type the letters.';activeUtterance=null; };
+        if(window.speechSynthesis.paused) window.speechSynthesis.resume();
+        window.speechSynthesis.speak(u);
+        status.textContent='🔊 Audio requested…';
+        setTimeout(()=>{
+          if(number===speechCounter && !speechStarted && activeUtterance===u){
+            status.textContent='No speech started. Tap 🔊 Hear word again, check media volume, and try Safari if this continues.';
+          }
+        },2600);
+      }catch(e){status.textContent='Sound could not start: '+(e.message||'browser error')+'. Try Safari.';}
+    };
+    // Allow WebKit to finish asynchronous cancellation before a new utterance.
+    // The first pronunciation is immediate and tied to the Start button tap.
+    if(busy) setTimeout(play,180); else play();
+  }
+
   function speakWord(){
     if (!state.started || state.cursor>=state.queue.length)return;
     say('Your word is ' + currentWord() + '. Spell ' + currentWord() + '.');
   }
   function stopListening(){
+    micCounter++;
     if(recognition){try{recognition.abort();}catch(e){} recognition=null;}
     listening=false;renderMic();
   }
   function renderMic(){
     const b=$('micBtn'); b.classList.toggle('active',listening);
     b.textContent=listening?'⏹ Stop listening':'🎤 Speak letters';
-    b.disabled=!hasMic || Boolean(state.graded);
-    b.title=hasMic?'':'Speech recognition is not available in this browser';
+    b.disabled=!hasMic || isIOSChrome || Boolean(state.graded);
+    b.title=isIOSChrome?'On iPhone, open in Safari for microphone recognition':hasMic?'':'Speech recognition is not available in this browser';
   }
   function normalize(s){return s.toLowerCase().replace(/[^a-z]/g,'');}
   function start(resume){
-    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    stopListening();stopSpeaking();
     state=resume && load() || freshState(); state.started=true;
     store(); render(); speakWord();
   }
@@ -163,6 +202,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     $('triesStat').textContent=state.cursor<20?'First-round word '+(state.cursor+1):'Keep practicing!';
     $('mistakeStat').textContent=(20-state.mastered.length)+' still to master';
     const graded=state.graded;
+    $('revealedWord').classList.add('hidden');$('revealedWord').textContent='';
+    $('showWordBtn').textContent='Parent help: show current word';
     $('answer').disabled=Boolean(graded);
     $('checkBtn').disabled=Boolean(graded);
     $('inputActions').classList.toggle('hidden',Boolean(graded));
@@ -202,14 +243,14 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   }
   function next(){
     if(!state.graded)return;
-    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    stopListening();stopSpeaking();
     state.cursor++;state.graded=null;store();
     $('answer').value='';setNotice('');render();
     if(state.cursor<state.queue.length)speakWord();
   }
   function restartWord(){
     if(!state.started || state.cursor>=state.queue.length)return;
-    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    stopListening();stopSpeaking();
     // A do-over rolls back the current submitted answer, if any. No mistake is charged.
     const graded=state.graded;
     if(graded){
@@ -226,7 +267,7 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     store();render();speakWord();
   }
   function resetAll(){
-    stopListening();if(hasSpeech)speechSynthesis.cancel();
+    stopListening();stopSpeaking();
     if(!confirm('Start the whole quiz over? Your current progress will be cleared.'))return;
     state=freshState();store();$('answer').value='';setNotice('');show(w);
     $('resumeBtn').classList.add('hidden');
@@ -265,31 +306,52 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   }
   function toggleMic(){
     if(listening){stopListening();setNotice('Stopped listening. Check the letters you entered.');return;}
-    if(!hasMic){setNotice('This browser does not support microphone spelling. You can type or tap letters instead.');return;}
+    if(isIOSChrome){setNotice('iPhone Chrome and in-app browsers may not support speech recognition. Open this exact page in Safari, or type the letters.');return;}
+    if(!hasMic){setNotice('This browser does not support speech recognition. On iPhone use Safari, or type/tap the letters.');return;}
     if(state.graded)return;
-    if(hasSpeech)speechSynthesis.cancel();
+    stopSpeaking();
     micError='';
+    const number=++micCounter;
+    let speechRecognitionStarted=false;
     try{
       recognition=new SpeechRecognition();
-      recognition.lang='en-US';recognition.continuous=true;recognition.interimResults=false;
+      recognition.lang='en-US';
+      // iOS WebKit is less reliable with continuous recognition. Use a short,
+      // single utterance; the child can tap Speak letters again to append more.
+      recognition.continuous=!isIOS;
+      recognition.interimResults=false;
+      recognition.onstart=()=>{
+        if(number!==micCounter)return;
+        speechRecognitionStarted=true;listening=true;renderMic();setNotice('🎤 Listening! Say a few letters slowly, then pause. You can tap again to add more.');
+      };
       recognition.onresult=(event)=>{
+        if(number!==micCounter)return;
         for(let i=event.resultIndex;i<event.results.length;i++){
           if(event.results[i].isFinal) hearLetters(event.results[i][0].transcript);
         }
       };
       recognition.onerror=(event)=>{
+        if(number!==micCounter)return;
         micError=event.error;
-        if(event.error==='not-allowed'||event.error==='service-not-allowed')setNotice('Microphone permission was denied. Allow microphone access in your browser, or type your spelling.');
-        else if(event.error==='no-speech')setNotice('I did not hear any letters. Try again or type your spelling.');
-        else if(event.error!=='aborted')setNotice('Microphone error: '+event.error+'. You can type your spelling instead.');
+        if(event.error==='not-allowed'||event.error==='service-not-allowed')setNotice('Safari denied speech recognition. Check the site microphone permission, or enter the letters manually.');
+        else if(event.error==='no-speech')setNotice('I did not hear any letters. Tap Speak letters and try again, or type instead.');
+        else if(event.error!=='aborted')setNotice('Microphone failed: '+event.error+'. You can type or tap the letters instead.');
       };
       recognition.onend=()=>{
+        if(number!==micCounter)return;
         listening=false;recognition=null;renderMic();
-        if(!micError) setNotice('Finished listening. Check your letters before submitting.');
+        if(!micError) setNotice('Stopped listening. Review the letters above, then check spelling (or tap Speak letters again).');
       };
-      recognition.start();listening=true;renderMic();setNotice('Listening! Say one letter at a time, clearly.');
-    }catch(e){recognition=null;listening=false;renderMic();setNotice('Could not start the microphone. Type or tap your letters instead.');}
+      setNotice('Requesting microphone… allow access if Safari asks.');
+      recognition.start();listening=true;renderMic();
+      setTimeout(()=>{
+        if(number===micCounter && recognition && !speechRecognitionStarted){
+          setNotice('The microphone may not have started. If the iPhone never requests access, open in Safari or type the letters.');
+        }
+      },6000);
+    }catch(e){recognition=null;listening=false;renderMic();setNotice('Could not start recognition: '+(e.message||'browser error')+'. Type or tap letters instead.');}
   }
+
   function makeLetterKeyboard(){
     const letters=$('letters');
     for(const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){
@@ -304,6 +366,13 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   $('startBtn').addEventListener('click',()=>start(false));
   $('resumeBtn').addEventListener('click',()=>start(true));
   $('repeatBtn').addEventListener('click',()=>{stopListening();speakWord();});
+  $('testSoundBtn').addEventListener('click',()=>say('Sound test. Can you hear me? The spelling quiz is ready.',0.9,'welcome'));
+  $('showWordBtn').addEventListener('click',()=>{
+    const target=$('revealedWord');const hidden=target.classList.contains('hidden');
+    target.textContent=hidden?currentWord().toUpperCase():'';
+    target.classList.toggle('hidden',!hidden);
+    $('showWordBtn').textContent=hidden?'Hide word again':'Parent help: show current word';
+  });
   $('restartWordBtn').addEventListener('click',restartWord);
   $('micBtn').addEventListener('click',toggleMic);
   $('checkBtn').addEventListener('click',check);
@@ -318,7 +387,8 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
   });
   makeLetterKeyboard();
   if(!hasMic)$('micBtn').title='Microphone recognition is unavailable in this browser';
-  if(!hasSpeech)$('repeatBtn').disabled=true;
+  if(!hasSpeech){$('repeatBtn').disabled=true;$('testSoundBtn').disabled=true;}
+  if(isIOSChrome)$('welcomeNotice').textContent='On iPhone, speech recognition usually requires Safari (not Chrome or an in-app browser). Open this site in Safari.';
   if(load()?.started){$('resumeBtn').classList.remove('hidden');}
 })();
 </script>
