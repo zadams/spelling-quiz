@@ -245,7 +245,9 @@ label.input-label{display:block;font-size:14px;font-weight:800;margin-bottom:8px
     speechStarted=false;
     renderMic();
 
-    const letters=word.split('');
+    // Speech synthesis receives letter names in uppercase for clear pronunciation;
+    // all written words and answers still appear in lowercase.
+    const letters=word.toUpperCase().split('');
     const parts=[
       {text:'Nice try! The correct spelling is:',rate:0.84,pause:500},
       ...letters.map((letter,i)=>({
